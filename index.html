@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#07030f" />
+  <meta name="description" content="Rhythm Dash — jogo estilo Geometry Dash onde a música gera o mapa." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <title>Rhythm Dash</title>
+  <script type="module" crossorigin src="./assets/index-B4iF9Vy-.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DK90xaLJ.css">
+</head>
+<body>
+  <div id="app">
+    <section id="screen-home" class="screen">
+      <header class="hero">
+        <div class="hero-stage" aria-hidden="true">
+          <div class="hero-glow"></div>
+          <div class="hero-float">
+            <div class="hero-cube">
+              <i class="face f1"></i><i class="face f2"></i><i class="face f3"></i>
+              <i class="face f4"></i><i class="face f5"></i><i class="face f6"></i>
+            </div>
+          </div>
+          <div class="hero-shadow"></div>
+        </div>
+        <h1>Rhythm Dash</h1>
+        <p>Escolha uma música — o jogo gera o mapa a partir do áudio, no seu aparelho.</p>
+      </header>
+
+      <div class="search-box">
+        <input id="search-input" type="text" placeholder="Buscar música, colar link (Spotify/YouTube/MP3)…" />
+        <button id="search-btn">Buscar</button>
+      </div>
+
+      <div class="quick-actions">
+        <label class="file-btn">
+          📂 Arquivo do aparelho
+          <input id="file-input" type="file" accept="audio/*" hidden />
+        </label>
+        <button id="demo-btn" class="secondary">🎮 Música do jogo (demo 128 BPM)</button>
+      </div>
+
+      <div id="search-results" class="results"></div>
+
+      <details class="settings">
+        <summary>⚙️ Modo de jogo &amp; 🖥️ Backend próprio</summary>
+        <div class="settings-body">
+          <label>
+            Modo de jogo:
+            <select id="mode-select">
+              <option value="beat">🎯 Modo Batida (recomendado)</option>
+              <option value="free">🕹️ Modo Livre</option>
+            </select>
+          </label>
+
+          <p class="hint">
+            Backend próprio (yt-dlp) — músicas completas de qualquer fonte. Requer HTTPS se o
+            app estiver rodando em https (veja o README para túnel/deploy).
+          </p>
+          <div class="backend-row">
+            <input id="backend-url" type="text" placeholder="https://seu-servidor.exemplo.com" />
+            <input id="backend-key" type="text" placeholder="chave (opcional)" />
+            <button id="backend-test-btn">Testar</button>
+          </div>
+          <p id="backend-status" class="hint"></p>
+        </div>
+      </details>
+    </section>
+
+    <section id="screen-loading" class="screen hidden">
+      <div class="loading-box">
+        <div class="spinner"></div>
+        <p id="loading-text">Carregando…</p>
+        <div class="progress-track"><div id="loading-bar" class="progress-bar"></div></div>
+      </div>
+    </section>
+
+    <section id="screen-game" class="screen hidden">
+      <canvas id="game-canvas"></canvas>
+      <button id="pause-btn" class="pause-btn" aria-label="Pausar">⏸</button>
+    </section>
+
+    <div id="overlay" class="overlay hidden"></div>
+  </div>
+
+</body>
+</html>
