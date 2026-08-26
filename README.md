@@ -3,6 +3,8 @@
 
 Jogo mobile estilo **Geometry Dash** onde **a música gera o mapa**.
 
+> 🌐 **Jogar online (sem instalar nada):** [https://JOAOCAETANO19.github.io/Mobile/](https://JOAOCAETANO19.github.io/Mobile/) — use a **faixa demo** (128 BPM) para testar sem internet.
+
 O jogador escolhe a música (busca, link direto ou arquivo do aparelho) e o jogo analisa o áudio
 em tempo real no dispositivo: detecta **batidas**, calcula o **BPM**, identifica **seções**
 (intro, build, drop, break), mede a **energia** e extrai a **cor dominante** do som — e então
