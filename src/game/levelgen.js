@@ -24,7 +24,41 @@ const SECTION_DENSITY = {
   outro: 0,
 };
 
-const OBSTACLE_TYPES = ['spike', 'block', 'pad', 'orb'];
+/**
+ * Pesos do sorteio do tipo de obstáculo por seção (soma normalizada em runtime).
+ * "block" aparece com frequência maior em builds (variedade), e "shield" é raro,
+ * só em seções densas, para dar um respiro no momento certo.
+ */
+const TYPE_WEIGHTS = {
+  drop: { spike: 54, block: 24, pad: 10, orb: 6, shield: 6 },
+  build: { spike: 30, block: 40, pad: 15, orb: 9, shield: 6 },
+  flow: { spike: 55, block: 20, pad: 15, orb: 10, shield: 0 },
+};
+const DEFAULT_TYPE_WEIGHTS = TYPE_WEIGHTS.flow;
+
+const OBSTACLE_TYPES = ['spike', 'block', 'pad', 'orb', 'shield'];
+const INTRO_SPIKE_BEATS = 3; // abertura previsível: os 3 primeiros obstáculos são espinhos
+const MIN_SHIELD_GAP_BEATS = 16; // não empilhar escudos: intervalo mínimo entre um e outro
+
+/** Sorteia o tipo do obstáculo determinísticamente (RNG injetado). */
+function pickObstacleType(rng, sectionLabel, obstaclesPlaced, beatsSinceLastShield) {
+  if (obstaclesPlaced < INTRO_SPIKE_BEATS) return 'spike';
+  const weights = TYPE_WEIGHTS[sectionLabel] || DEFAULT_TYPE_WEIGHTS;
+  const candidates = [];
+  let total = 0;
+  for (const [type, weight] of Object.entries(weights)) {
+    if (weight <= 0) continue;
+    if (type === 'shield' && beatsSinceLastShield < MIN_SHIELD_GAP_BEATS) continue;
+    candidates.push([type, weight]);
+    total += weight;
+  }
+  let roll = rng() * total;
+  for (const [type, weight] of candidates) {
+    roll -= weight;
+    if (roll < 0) return type;
+  }
+  return candidates[candidates.length - 1][0];
+}
 
 function sectionAt(sections, time) {
   for (const s of sections) {
@@ -63,24 +97,22 @@ export function generateLevel(analysis, track = {}) {
   const collectibles = [];
 
   let beatsSinceLastObstacle = 0;
+  let beatsSinceLastShield = Infinity;
 
   for (let i = 0; i < beats.length; i++) {
     const beat = beats[i];
     const section = sectionAt(sections, beat.time) || { label: 'flow', color: '#7c5cff' };
     const density = SECTION_DENSITY[section.label] ?? 2;
     beatsSinceLastObstacle++;
+    beatsSinceLastShield++;
 
     if (density > 0 && beatsSinceLastObstacle >= density) {
       beatsSinceLastObstacle = 0;
-      // Espinho de 1 célula plantado no meio da batida = pico do arco do pulo seguinte.
+      // Obstáculo plantado no meio da batida = pico do arco do pulo seguinte.
       const spikeTime = beat.time + T / 2;
 
-      // 85% espinho, 10% pad (impulso extra), 5% orb (air-jump) — mantém "só espinhos de 1 célula"
-      // como regra geral, variando ocasionalmente para dar ritmo visual.
-      const roll = rng();
-      let type = 'spike';
-      if (roll > 0.95) type = 'orb';
-      else if (roll > 0.85) type = 'pad';
+      const type = pickObstacleType(rng, section.label, obstacles.length, beatsSinceLastShield);
+      if (type === 'shield') beatsSinceLastShield = 0;
 
       obstacles.push({
         id: `ob_${i}`,

@@ -18,14 +18,47 @@ export const JUDGE = {
 
 export const MODE = { BEAT: 'beat', FREE: 'free' };
 
+/** Pontuação base (antes do multiplicador de combo). */
+export const SCORE = {
+  PERFECT: 100,
+  GOOD: 50,
+  NEAR_MISS: 25,
+  COLLECT: 25,
+};
+
+/**
+ * Degráus do multiplicador de pontuação por combo: 1x (padrão) → 2x a partir de
+ * 10 de combo → 3x a partir de 25 → 4x a partir de 50. Cruzar uma tier dispara
+ * onComboMilestone (banner + vibração no front).
+ */
+export const COMBO_MILESTONES = [
+  { combo: 10, mult: 2 },
+  { combo: 25, mult: 3 },
+  { combo: 50, mult: 4 },
+];
+
+export function multiplierForCombo(combo) {
+  let mult = 1;
+  for (const m of COMBO_MILESTONES) {
+    if (combo >= m.combo) mult = m.mult;
+  }
+  return mult;
+}
+
+const TRAIL_WINDOW_SEC = 0.3; // rastro: janela de posições recentes do jogador
+const TRAIL_MAX_POINTS = 24;
+
 /**
  * @typedef {Object} EngineCallbacks
  * @property {(judge: 'PERFECT'|'GOOD'|'MISS', combo: number) => void} [onJudge]
- * @property {() => void} [onNearMiss]
+ * @property {(obstacle: object) => void} [onNearMiss]
  * @property {(checkpoint: {time:number,label:string,progressPct:number}) => void} [onDeath]
  * @property {(collectible: object) => void} [onCollect]
  * @property {() => void} [onOrb]
  * @property {(section: object) => void} [onSectionChange]
+ * @property {(milestone: {combo:number,mult:number}) => void} [onComboMilestone]
+ * @property {(obstacle: object) => void} [onShieldPickup]
+ * @property {(obstacle: object) => void} [onShieldBreak]
  * @property {() => void} [onFinish]
  */
 
@@ -64,7 +97,33 @@ export class GameEngine {
     this.hitObstacleIds = new Set();
     this.freeGravity = { g: 22, v: 9 }; // parâmetros fixos para o Modo Livre
     this.lastNearMissCheck = new Set();
+    this.shieldActive = false; // escudo absorve uma colisão fatal e depois desaparece
+    this.trail = []; // posições recentes {y, t} para o rastro neon
     this.finished = false;
+  }
+
+  /** Soma pontos já aplicando o multiplicador do combo atual. */
+  addScore(basePoints) {
+    const gained = Math.round(basePoints * multiplierForCombo(this.combo));
+    this.score += gained;
+    return gained;
+  }
+
+  /**
+   * Registro central de "hit": toques bem cronometrados e near-misses passam por aqui.
+   * Incrementa combo (e melhor combo), converte em pontos via multiplicador e
+   * celebra o marco quando o combo cruza uma nova tier.
+   */
+  registerHit(basePoints, kind = 'HIT') {
+    const comboBefore = this.combo;
+    this.combo += 1;
+    this.bestCombo = Math.max(this.bestCombo, this.combo);
+    const gained = this.addScore(basePoints);
+    const milestone =
+      COMBO_MILESTONES.find((m) => comboBefore < m.combo && this.combo >= m.combo) || null;
+    if (milestone) this.callbacks.onComboMilestone?.(milestone);
+    this.callbacks.onRegisterHit?.({ kind, combo: this.combo, gained, milestone });
+    return { gained, milestone, combo: this.combo };
   }
 
   /** Beat mais próximo (para o anel visual de expectativa e para o snap do pulo). */
@@ -125,9 +184,8 @@ export class GameEngine {
     this.player.vy = this.physics.v;
     this.player.landedBeatIndex = beat.index;
 
-    this.combo += 1;
-    this.bestCombo = Math.max(this.bestCombo, this.combo);
-    this.score += judge === 'PERFECT' ? 100 : 50;
+    // Combo + pontuação (com multiplicador) passam pelo registro central de hits.
+    this.registerHit(judge === 'PERFECT' ? SCORE.PERFECT : SCORE.GOOD, judge);
     this.callbacks.onJudge?.(judge, this.combo);
   }
 
@@ -201,6 +259,18 @@ export class GameEngine {
       if (this.hitObstacleIds.has(ob.id)) continue;
       const dx = Math.abs(ob.screenX - playerScreenX);
 
+      if (ob.type === 'shield') {
+        // Power-up: coletar ativa o escudo (já ativo, o item é ignorado).
+        if (dx < 0.45) {
+          this.hitObstacleIds.add(ob.id);
+          if (!this.shieldActive) {
+            this.shieldActive = true;
+            this.callbacks.onShieldPickup?.(ob);
+          }
+        }
+        continue;
+      }
+
       if (ob.type === 'pad' || ob.type === 'orb') {
         // Pads/orbs dão impulso extra em vez de matar.
         if (dx < 0.45) {
@@ -219,20 +289,26 @@ export class GameEngine {
         continue;
       }
 
-      // Espinho: colisão só se o cubo estiver baixo (não passou por cima) na hora certa.
+      // Espinho/bloco: colisão fatal só se o cubo estiver baixo (não passou por cima).
       const hitboxHalfWidth = 0.35;
       if (dx < hitboxHalfWidth) {
         const clearance = this.player.y;
-        const requiredClearance = 0.5; // altura mínima do espinho, em células
+        const requiredClearance = 0.5; // altura mínima do obstáculo, em células
         if (clearance < requiredClearance) {
           this.hitObstacleIds.add(ob.id);
-          this.die(currentTime);
-          return;
+          if (this.shieldActive) {
+            // O escudo absorve o golpe fatal e desaparece — o jogador respira.
+            this.shieldActive = false;
+            this.callbacks.onShieldBreak?.(ob);
+          } else {
+            this.die(currentTime);
+            return;
+          }
         } else if (dx < hitboxHalfWidth * 1.8 && !this.lastNearMissCheck.has(ob.id)) {
           this.lastNearMissCheck.add(ob.id);
-          this.callbacks.onNearMiss?.();
-          this.combo += 1; // near-miss soma no combo, como descrito no README
-          this.bestCombo = Math.max(this.bestCombo, this.combo);
+          this.callbacks.onNearMiss?.(ob);
+          // Near-miss soma no combo E em pontos, via o registro central de hits.
+          this.registerHit(SCORE.NEAR_MISS, 'NEAR_MISS');
         }
       }
     }
@@ -245,7 +321,7 @@ export class GameEngine {
         const original = this.level.collectibles.find((c) => c.id === col.id);
         if (original && !original.collected) {
           original.collected = true;
-          this.score += 25;
+          this.addScore(SCORE.COLLECT);
           this.callbacks.onCollect?.(col);
         }
       }
@@ -294,6 +370,11 @@ export class GameEngine {
     this.checkSectionChange(currentTime);
     if (!this.player.dead) {
       this.checkCollisions(currentTime, canvasWidthCells);
+      // Rastro: guarda posições recentes (altura em células + tempo do áudio).
+      this.trail.push({ y: this.player.y, t: currentTime });
+      const cutoff = currentTime - TRAIL_WINDOW_SEC;
+      while (this.trail.length && this.trail[0].t < cutoff) this.trail.shift();
+      if (this.trail.length > TRAIL_MAX_POINTS) this.trail.splice(0, this.trail.length - TRAIL_MAX_POINTS);
     }
     this.particles.update(dt);
   }

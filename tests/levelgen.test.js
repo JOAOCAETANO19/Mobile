@@ -81,3 +81,33 @@ test('findCheckpoint retorna o início da seção correta e progresso em %', () 
   assert.equal(checkpoint.time, 40);
   assert.equal(checkpoint.progressPct, 45);
 });
+
+test('variedade de obstáculos: blocos frequentes em build, escudo em seções densas, abertura previsível', () => {
+  const allowed = ['spike', 'block', 'pad', 'orb', 'shield'];
+
+  // Seção build longa: blocos devem aparecer com frequência (o "build" ganha variedade).
+  const buildAnalysis = fakeAnalysis(128, 24, [
+    { label: 'intro', start: 0, end: 3, color: '#111' },
+    { label: 'build', start: 3, end: 24, color: '#222' },
+  ]);
+  const build = generateLevel(buildAnalysis, { title: 'Variedade', artist: 'Test' });
+  const types = build.obstacles.map((o) => o.type);
+  for (const t of types) assert.ok(allowed.includes(t), `tipo inesperado: ${t}`);
+  const blocks = types.filter((t) => t === 'block').length;
+  const spikes = types.filter((t) => t === 'spike').length;
+  assert.ok(blocks > 0, 'build precisa ter blocos');
+  assert.ok(blocks >= spikes * 0.4, `blocos frequentes em build (${blocks} blocos vs ${spikes} espinhos)`);
+
+  // Seção drop longa: deve existir pelo menos um escudo (respiro do jogador).
+  const drop = generateLevel(
+    fakeAnalysis(140, 40, [{ label: 'drop', start: 0, end: 40, color: '#333' }]),
+    { title: 'Escudo', artist: 'Test' }
+  );
+  assert.ok(drop.obstacles.some((o) => o.type === 'shield'), 'drop longo deve ter pelo menos um escudo');
+
+  // Abertura previsível: os 3 primeiros obstáculos do nível são sempre espinhos.
+  assert.ok(
+    build.obstacles.slice(0, 3).every((o) => o.type === 'spike'),
+    'os 3 primeiros obstáculos devem ser espinhos'
+  );
+});

@@ -13,7 +13,7 @@ import {
 } from './core/audio.js';
 import { analyzeAudioBuffer } from './core/analysis.js';
 import { generateLevel } from './game/levelgen.js';
-import { GameEngine, MODE } from './game/engine.js';
+import { GameEngine, MODE, CELLS_PER_BEAT, multiplierForCombo, PLAYER_SCREEN_X_RATIO } from './game/engine.js';
 import { Renderer } from './game/renderer.js';
 import { sfx, vibrate } from './game/fx.js';
 import { createDemoTrackBuffer, DEMO_TRACK_META } from './demo/demotrack.js';
@@ -28,7 +28,15 @@ let player = null;
 let level = null;
 let rafId = null;
 let judgeState = { text: '', alpha: 0 };
+let milestoneState = { text: '', alpha: 0 };
 let lastFrameTime = performance.now();
+
+/** Posição de tela do centro do cubo (para partículas de efeito). */
+function playerScreenPos() {
+  const x = renderer.widthCss * PLAYER_SCREEN_X_RATIO;
+  const y = renderer.groundY() - engine.player.y * renderer.cellPx - renderer.cellPx * 0.4;
+  return { x, y };
+}
 
 // ---------- Home: busca ----------
 
@@ -224,12 +232,46 @@ function startGame(audioBuffer, lvl) {
       judgeState = { text: judge === 'PERFECT' ? 'PERFEITO!' : 'BOM', alpha: 1 };
       if (judge === 'PERFECT') { sfx.perfect(); vibrate(15); } else { sfx.good(); }
     },
-    onNearMiss: () => { sfx.nearMiss(); },
+    onNearMiss: () => {
+      sfx.nearMiss();
+      judgeState = { text: 'QUASE! 💨', alpha: 1 };
+      renderer.shake('light');
+      const p = playerScreenPos();
+      engine.particles.spawn(p.x + renderer.cellPx * 0.4, p.y, 8, { speed: 160, life: 0.35, color: '#c9d4ff', size: 2.5 });
+    },
     onOrb: () => { sfx.orb(); },
-    onCollect: () => { sfx.collect(); },
+    onCollect: () => {
+      sfx.collect();
+      const p = playerScreenPos();
+      engine.particles.spawn(p.x, p.y - renderer.cellPx * 0.8, 10, { speed: 130, life: 0.45, color: '#4de0ff', size: 3 });
+    },
+    onComboMilestone: (m) => {
+      milestoneState = { text: `MARCO DE COMBO ×${m.mult}!`, alpha: 1.4 };
+      sfx.milestone();
+      vibrate([20, 30, 20]);
+      const p = playerScreenPos();
+      engine.particles.spawn(p.x, p.y - renderer.cellPx, 18, { speed: 200, life: 0.6, color: '#ffd166', size: 3.5 });
+    },
+    onShieldPickup: () => {
+      sfx.shieldPickup();
+      vibrate(25);
+      const p = playerScreenPos();
+      engine.particles.spawn(p.x, p.y, 14, { speed: 150, life: 0.5, color: '#4dff88', size: 3 });
+    },
+    onShieldBreak: () => {
+      sfx.shieldBreak();
+      vibrate([30, 20, 40]);
+      renderer.shake('medium');
+      const p = playerScreenPos();
+      engine.particles.spawn(p.x, p.y, 22, { speed: 220, life: 0.55, color: '#4dff88', size: 4 });
+    },
     onDeath: (checkpoint) => {
       sfx.death();
       vibrate([40, 30, 60]);
+      renderer.shake('strong');
+      const p = playerScreenPos();
+      engine.particles.spawn(p.x, p.y, 34, { speed: 260, life: 0.8, color: '#ff5d8f', size: 4.5 });
+      engine.particles.spawn(p.x, p.y, 18, { speed: 180, life: 0.7, color: '#ffffff', size: 3 });
       player.stop();
       screens.showOverlay(screens.deathOverlayHtml(checkpoint, { score: engine.score, bestCombo: engine.bestCombo }));
       wireDeathOverlay(checkpoint);
@@ -237,6 +279,10 @@ function startGame(audioBuffer, lvl) {
     onSectionChange: () => {},
     onFinish: () => {
       player.stop();
+      const p = playerScreenPos();
+      engine.particles.spawn(renderer.widthCss * 0.3, p.y - renderer.cellPx, 20, { speed: 220, life: 0.8, color: '#4dffea', size: 4 });
+      engine.particles.spawn(renderer.widthCss * 0.6, p.y - renderer.cellPx * 1.4, 20, { speed: 220, life: 0.8, color: '#ffd166', size: 4 });
+      engine.particles.spawn(renderer.widthCss * 0.8, p.y - renderer.cellPx, 20, { speed: 220, life: 0.8, color: '#ff5d8f', size: 4 });
       screens.showOverlay(screens.finishOverlayHtml({ score: engine.score, bestCombo: engine.bestCombo }));
       wireFinishOverlay();
     },
@@ -245,6 +291,11 @@ function startGame(audioBuffer, lvl) {
   window.addEventListener('resize', () => renderer?.resize());
   canvas.addEventListener('pointerdown', onTap);
   window.addEventListener('keydown', onKeydown);
+  // Correção: o botão de pausa existia no HTML mas nunca tinha o listener conectado.
+  app.querySelector('#pause-btn')?.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    togglePause();
+  });
 
   player.play(0);
   lastFrameTime = performance.now();
@@ -332,26 +383,48 @@ function loop() {
 
   const currentTime = player.getCurrentTime();
   engine.update(currentTime, dt, renderer.widthCells);
+  renderer.updateShake(dt);
 
   judgeState.alpha = Math.max(0, judgeState.alpha - dt * 1.5);
+  milestoneState.alpha = Math.max(0, milestoneState.alpha - dt * 0.9);
 
   const section = engine.level.sections.find((s) => currentTime >= s.start && currentTime < s.end);
   const beat = engine.nearestBeat(currentTime);
   const beatProgress = 1 - Math.min(1, Math.abs(beat.time - currentTime) / (engine.physics.T / 2));
+  const worldX = currentTime * CELLS_PER_BEAT * (level.bpm / 60);
 
   renderer.clear();
-  renderer.drawBackground(section, beatProgress);
-  renderer.drawGround(section);
+  renderer.beginScene();
+  renderer.drawBackground(section, beatProgress, currentTime, worldX);
+  renderer.drawGround(section, beatProgress, worldX);
 
   for (const col of engine.getVisibleCollectibles(currentTime, renderer.widthCells)) {
     renderer.drawCollectible(col, currentTime);
   }
   for (const ob of engine.getVisibleObstacles(currentTime, renderer.widthCells)) {
-    renderer.drawObstacle(ob);
+    renderer.drawObstacle(ob, currentTime);
   }
-  renderer.drawPlayer(engine.player, engine.mode === MODE.BEAT ? beatProgress : null);
+  renderer.drawPlayer(engine.player, engine.mode === MODE.BEAT ? beatProgress : null, {
+    trail: engine.trail,
+    shieldActive: engine.shieldActive,
+    time: currentTime,
+  });
   engine.particles.render(renderer.ctx);
-  renderer.drawHud({ combo: engine.combo, score: engine.score, judgeText: judgeState.text, judgeAlpha: judgeState.alpha });
+  renderer.endScene();
+
+  renderer.drawHud({
+    score: engine.score,
+    combo: engine.combo,
+    multiplier: multiplierForCombo(engine.combo),
+    sectionLabel: engine.currentSectionLabel,
+    sectionColor: section?.color,
+    sectionGlow: section?.glow,
+    judgeText: judgeState.text,
+    judgeAlpha: judgeState.alpha,
+    milestoneText: milestoneState.text,
+    milestoneAlpha: milestoneState.alpha,
+    shieldActive: engine.shieldActive,
+  });
 }
 
 // ---------- PWA ----------
