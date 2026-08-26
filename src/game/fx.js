@@ -38,6 +38,12 @@ export const sfx = {
   death: () => beep({ freq: 220, sweepTo: 40, duration: 0.35, type: 'sawtooth', gain: 0.25 }),
   collect: () => beep({ freq: 1046, sweepTo: 1568, duration: 0.1, type: 'sine', gain: 0.15 }),
   orb: () => beep({ freq: 700, sweepTo: 1200, duration: 0.1, type: 'square', gain: 0.16 }),
+  shieldPickup: () => beep({ freq: 520, sweepTo: 1040, duration: 0.14, type: 'sine', gain: 0.22 }),
+  shieldBreak: () => beep({ freq: 320, sweepTo: 90, duration: 0.28, type: 'square', gain: 0.24 }),
+  milestone: () => {
+    beep({ freq: 660, duration: 0.09, type: 'triangle', gain: 0.2 });
+    setTimeout(() => beep({ freq: 990, duration: 0.14, type: 'triangle', gain: 0.22 }), 90);
+  },
   uiClick: () => beep({ freq: 500, duration: 0.04, type: 'sine', gain: 0.08 }),
 };
 

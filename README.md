@@ -21,9 +21,10 @@ velocidade que acompanham a faixa.
 | 🎯 **Modo Batida** (*default*) | O pulo dura exatamente **1 batida**: toque quando o anel fecha (na batida) e o obstáculo passa no pico do pulo → **1 clique = 1 obstáculo = 1 batida**, com combo/PERFEITO |
 | 🕹️ **Modo Livre** | Geometry Dash clássico: pule livremente sobre obstáculos (ainda sincronizados à música) |
 | 🎨 **Tema da música** | Paleta de cada seção derivada do centróide espectral (sinestesia visual) |
+| 🌆 **Visual synthwave** | Renderer canvas: sol pulsante na batida, 2 camadas de montanhas em parallax, grade em perspectiva pulsando com a música, cubo com gradiente/rosto/rastro neon, HUD translúcido |
 | 🧱 **Geração determinística** | A mesma música sempre gera o mesmo mapa (seed = hash da faixa) |
 | 📱 **PWA instalável** | Adicione à tela inicial (Android/iOS Safari) e jogue |
-| 🎮 **Gameplay** | Espinhos, blocos, pads (amarelos), orbs (air-jump), coletáveis 💎 |
+| 🎮 **Gameplay** | Espinhos, blocos, pads (amarelos), orbs (air-jump), escudo 🛡️, coletáveis 💎 + multiplicador de combo (1x→2x→3x→4x) |
 
 ## ▶️ Como rodar
 
@@ -86,8 +87,19 @@ server/
 
 **Mecânica:**
 - Rotação do cubo sincronizada: no modo batida gira exatamente 90° por pulo (aterrissa "de pé").
-- Squash & stretch (estica no pulo, espreme na aterrissagem), faíscas de **near-miss** ("QUASE! 💨" soma no combo), vibração no celular (perfect/morte), feedback visual de timing.
+- Squash & stretch (estica no pulo, espreme na aterrissagem), faíscas de **near-miss** ("QUASE! 💨" soma no combo **e em pontos**), vibração no celular (perfect/marco/escudo/morte), feedback visual de timing.
+- **Multiplicador de pontuação por combo** (degraus): 1x (padrão) → **2x** a partir de 10 de combo → **3x** a partir de 25 → **4x** a partir de 50. Cruzar um degrau dispara banner de "MARCO DE COMBO" na tela + vibração. Tudo converte por uma função central `registerHit()` (toques e near-misses).
+- **Escudo 🛡️**: power-up raro (seções drop/build) que absorve **uma** colisão fatal e desaparece — dá um respiro no momento crítico.
+- **Screen-shake reativo**: leve no near-miss, médio quando o escudo quebra, forte na morte.
+- **Rastro neon**: posições recentes do jogador desenhadas como rastro atrás do cubo.
+- **Variedade de obstáculos**: blocos 🟪 aparecem com mais frequência nas seções **build**; a abertura do nível é previsível (3 primeiros obstáculos = espinhos).
 - **Checkpoints por seção musical** (BUILD/DROP…): morreu? "Retomar do DROP · 45%" recomeça a música exatamente ali (o áudio continua no tempo, sem dessincronizar).
+
+**Visual (interface fora do canvas):**
+- Tipografia própria: **Poppins** (texto) + **Space Grotesk** (títulos/HUD) via Google Fonts.
+- Tela inicial com **cubo 3D animado flutuando** + glow de fundo pulsante.
+- Cards de resultado, inputs e overlays (pausa/morte/vitória) com gradientes, bordas translúcidas e sombras.
+- Botão de pausa no canto do canvas (conectado via `pointerdown`, sem delay de clique).
 
 **Decisões-chave:**
 - O **relógio do jogo é o relógio do áudio** (`AudioContext.currentTime`): posição do jogador,
@@ -201,7 +213,14 @@ fórmulas de física e decisões técnicas descritas, incluindo:
 - Busca agregada Spotify (token anônimo do player web) + Deezer/iTunes/Audius/Internet Archive,
   extração best-effort de YouTube com cadeia de fallback, e link direto (`src/core/*.js`).
 - Backend próprio zero-dependência com yt-dlp para música completa (`server/`).
-- PWA instalável (manifest + service worker) e testes automatizados (40 testes, `npm test`).
+- PWA instalável (manifest + service worker) e testes automatizados (44 testes, `npm test`).
+
+**Reforma de mecânica e visual (PR #2):** multiplicador de pontuação por combo com marcos
+(2x/3x/4x), escudo 🛡️ que absorve uma colisão fatal, near-miss pontuado via `registerHit()`,
+screen-shake reativo, rastro neon do jogador, blocos mais frequentes em builds, e o renderer
+reescrevido em estética synthwave (sol pulsante, montanhas em parallax, grade em perspectiva,
+cubo com rosto e halo de escudo, HUD translúcido) — junto com a interface em HTML/CSS
+redesenhada (Poppins + Space Grotesk, cubo flutuante no menu, cards/overlays com gradiente).
 
 **Limitações conhecidas** (dependem de serviços externos de terceiros, que mudam com o tempo):
 - A extração pública do YouTube (Piped/Invidious/Cobalt) pode estar bloqueada — use o

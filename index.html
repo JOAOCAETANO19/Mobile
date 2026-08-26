@@ -3,18 +3,34 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <meta name="theme-color" content="#0a0a14" />
+  <meta name="theme-color" content="#07030f" />
   <meta name="description" content="Rhythm Dash — jogo estilo Geometry Dash onde a música gera o mapa." />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="icon" href="/icons/icon-192.png" />
   <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
+    rel="stylesheet"
+  />
   <title>Rhythm Dash</title>
 </head>
 <body>
   <div id="app">
     <section id="screen-home" class="screen">
       <header class="hero">
-        <h1>🎵 Rhythm Dash</h1>
+        <div class="hero-stage" aria-hidden="true">
+          <div class="hero-glow"></div>
+          <div class="hero-float">
+            <div class="hero-cube">
+              <i class="face f1"></i><i class="face f2"></i><i class="face f3"></i>
+              <i class="face f4"></i><i class="face f5"></i><i class="face f6"></i>
+            </div>
+          </div>
+          <div class="hero-shadow"></div>
+        </div>
+        <h1>Rhythm Dash</h1>
         <p>Escolha uma música — o jogo gera o mapa a partir do áudio, no seu aparelho.</p>
       </header>
 
