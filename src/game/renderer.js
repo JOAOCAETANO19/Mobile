@@ -224,16 +224,52 @@ export class Renderer {
 
   // ---------- Entidades ----------
 
-  drawObstacle(ob, time = 0) {
+  /**
+   * Linha de hit: a vertical fixa no x do jogador, onde o julgamento
+   * clique↔batida acontece. Pulsa com o acento para dar o "alvo" visual do toque.
+   */
+  drawHitLine(beatPulse, color = '#4dffea') {
+    const { ctx, widthCss } = this;
+    const pulse = Math.max(0, Math.min(1, beatPulse));
+    const x = widthCss * PLAYER_SCREEN_X_RATIO;
+    const top = this.horizonY();
+    const bottom = this.heightCss;
+
+    ctx.save();
+    ctx.globalAlpha = 0.12 + 0.28 * pulse;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5 + 1.5 * pulse;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8 + 14 * pulse;
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
+
+    // Nó no ponto de contato (onde o cubo toca a linha no chão).
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.45 + 0.5 * pulse;
+    ctx.fillStyle = color;
+    const r = (2.5 + 2.5 * pulse) * (this.cellPx / 64);
+    ctx.beginPath();
+    ctx.arc(x, this.groundY(), r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawObstacle(ob, time = 0, beatPulse = 0) {
     const { ctx } = this;
     const x = this.worldToScreenX(ob.screenX);
     const gy = this.groundY();
     const s = this.cellPx * 0.8;
 
+    // Glow pulsante sincronizado com a batida: o brilho "acende" no acento.
+    const pulse = Math.max(0, Math.min(1, beatPulse));
+
     if (ob.type === 'spike') {
       ctx.save();
       ctx.shadowColor = '#ff3d6e';
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = 10 + 18 * pulse;
       const g = ctx.createLinearGradient(0, gy - s, 0, gy);
       g.addColorStop(0, '#ff8fb5');
       g.addColorStop(1, '#c81d4e');
@@ -258,7 +294,7 @@ export class Renderer {
       const d = s * 0.2; // deslocamento pseudo-3D
       ctx.save();
       ctx.shadowColor = '#7c5cff';
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = 10 + 16 * pulse;
       const g = ctx.createLinearGradient(0, gy - s, 0, gy);
       g.addColorStop(0, '#a37dff');
       g.addColorStop(1, '#5b2fd4');
@@ -287,10 +323,11 @@ export class Renderer {
       ctx.strokeRect(x - s / 2, gy - s, s, s);
       ctx.restore();
     } else if (ob.type === 'pad') {
-      const pulse = 0.5 + 0.5 * Math.sin(time * 8);
+      // O pad também "respira" na batida (antes pulsava fora do compasso).
+      const padPulse = 0.35 + 0.65 * pulse;
       ctx.save();
       ctx.shadowColor = '#ffd166';
-      ctx.shadowBlur = 12 + 10 * pulse;
+      ctx.shadowBlur = 10 + 14 * padPulse;
       const g = ctx.createLinearGradient(0, gy - s * 0.3, 0, gy);
       g.addColorStop(0, '#ffe97a');
       g.addColorStop(1, '#ffb03d');
@@ -307,7 +344,7 @@ export class Renderer {
       const r = s * 0.34;
       ctx.save();
       ctx.shadowColor = '#4dffea';
-      ctx.shadowBlur = 18;
+      ctx.shadowBlur = 12 + 14 * pulse;
       const g = ctx.createRadialGradient(x - r * 0.3, cy - r * 0.3, r * 0.1, x, cy, r);
       g.addColorStop(0, '#ffffff');
       g.addColorStop(0.4, '#4dffea');
@@ -329,7 +366,7 @@ export class Renderer {
       const R = s * 0.52;
       ctx.save();
       ctx.shadowColor = '#4dff88';
-      ctx.shadowBlur = 16;
+      ctx.shadowBlur = 12 + 12 * pulse;
       const g = ctx.createRadialGradient(x, cy, R * 0.2, x, cy, R);
       g.addColorStop(0, 'rgba(77,255,136,0.55)');
       g.addColorStop(1, 'rgba(77,255,136,0.05)');

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GameEngine, MODE, JUDGE, SCORE, multiplierForCombo } from '../src/game/engine.js';
+import { GameEngine, MODE, JUDGE, SCORE, multiplierForCombo, BOOST } from '../src/game/engine.js';
 import { generateLevel, physicsForBpm } from '../src/game/levelgen.js';
 
 function levelWithDrop(bpm = 120, durationSec = 8) {
@@ -166,4 +166,54 @@ test('escudo: absorve uma colisão fatal e desaparece (a segunda colisão mata)'
   engine.checkCollisions(level.obstacles[1].time, 20);
   assert.equal(engine.player.dead, true);
   assert.equal(events.death, 1);
+});
+
+test('boosts com física real: pad estica o arco para 1,15 batidas e orb faz air-jump da altura atual', () => {
+  const level = levelWithDrop(); // 120 BPM -> T = 0,5s
+  const { T, v, g } = physicsForBpm(level.bpm);
+  level.collectibles.length = 0;
+  level.obstacles.push({ id: 'pad_test', type: 'pad', time: 1.0, beatIndex: 2, section: 'drop', color: '#000', glow: '#000' });
+  level.obstacles.push({ id: 'orb_test', type: 'orb', time: 0.5 + T * 0.35, beatIndex: 1, section: 'drop', color: '#000', glow: '#000' });
+
+  // ---- PAD (no chão): o arco passa a durar exatamente 1,15 batidas ----
+  {
+    const engine = new GameEngine(level, {}, MODE.BEAT);
+    engine.checkCollisions(1.0, 20); // cubo no chão passa sobre o pad
+    assert.equal(engine.player.jumping, true);
+    assert.ok(Math.abs(engine.player.vy - v * BOOST.PAD_ARC_BEATS) < 1e-9);
+    // Tempo de voo real = 2·vy/g = 1,15·T
+    const arc = (2 * engine.player.vy) / g;
+    assert.ok(Math.abs(arc - BOOST.PAD_ARC_BEATS * T) < 1e-9);
+    // Ainda no ar 1,1 batida após o pad; aterrissou 1,2 batida depois.
+    engine.updatePlayer(1.0 + T * 1.1, 0.016);
+    assert.equal(engine.player.jumping, true);
+    engine.updatePlayer(1.0 + T * 1.2, 0.016);
+    assert.equal(engine.player.jumping, false);
+    assert.equal(engine.player.y, 0);
+  }
+
+  // ---- ORB (no ar): air-jump a partir da altura atual, sem teleport para o chão ----
+  {
+    const engine = new GameEngine(level, {}, MODE.BEAT);
+    engine.tap(0.5); // pulo normal na batida 1 (arco = 1 batida)
+    const tOrb = 0.5 + T * 0.35; // 35% do arco (subindo)
+    engine.updatePlayer(tOrb, 0.016);
+    const y0 = engine.player.y;
+    assert.ok(y0 > 1.5, `jogador deveria estar no ar (y=${y0})`);
+
+    engine.checkCollisions(tOrb, 20); // toca o orb no ar
+    // O novo arco nasce na altura atual: y(t) = y0 + vy·t − ½g·t²
+    assert.ok(Math.abs(engine.player.jumpOffset - y0) < 1e-9);
+    assert.ok(Math.abs(engine.player.vy - v * BOOST.ORB_VY_FACTOR) < 1e-9);
+
+    // Sem teleport: instantes após o orb a altura continua a partir de y0 (e ainda sobe).
+    engine.updatePlayer(tOrb + 0.016, 0.016);
+    assert.ok(engine.player.y > y0, `altura deveria continuar a partir de ${y0} (y=${engine.player.y})`);
+
+    // O arco do air-jump termina menos de 1 batida após o orb.
+    engine.updatePlayer(tOrb + T * 0.8, 0.016);
+    assert.equal(engine.player.jumping, true);
+    engine.updatePlayer(tOrb + T * 1.05, 0.016);
+    assert.equal(engine.player.jumping, false);
+  }
 });

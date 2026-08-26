@@ -45,6 +45,8 @@ export const sfx = {
     setTimeout(() => beep({ freq: 990, duration: 0.14, type: 'triangle', gain: 0.22 }), 90);
   },
   uiClick: () => beep({ freq: 500, duration: 0.04, type: 'sine', gain: 0.08 }),
+  countdownTick: () => beep({ freq: 660, duration: 0.09, type: 'sine', gain: 0.16 }),
+  countdownGo: () => beep({ freq: 990, sweepTo: 1320, duration: 0.18, type: 'triangle', gain: 0.2 }),
 };
 
 export function vibrate(pattern) {

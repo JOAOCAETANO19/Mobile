@@ -18,13 +18,15 @@ velocidade que acompanham a faixa.
 | 🔗 **Link direto** | Cole uma URL de MP3/M4A/OGG/WAV/FLAC (com fallback de CORS) |
 | 📂 **Arquivo local** | Envie uma música do aparelho — 100% offline/privada, completa |
 | 🥁 **Sincronia com a batida** | Detecção por *spectral flux* + autocorrelação (FFT própria, sem libs) |
-| 🎯 **Modo Batida** (*default*) | O pulo dura exatamente **1 batida**: toque quando o anel fecha (na batida) e o obstáculo passa no pico do pulo → **1 clique = 1 obstáculo = 1 batida**, com combo/PERFEITO |
+| 🎯 **Modo Batida** (*default*) | O pulo dura exatamente **1 batida**: toque quando o anel fecha (na batida) e o obstáculo passa no pico do pulo → **1 clique = 1 obstáculo = 1 batida**, com combo/PERFEITO. Janelas de julgamento **musicais** (PERFEITO/BOM = fração da batida, no max. o valor fixo em ms) + **linha de hit** na posição do jogador e **glow pulsante** nos obstáculos, tudo no acento |
 | 🕹️ **Modo Livre** | Geometry Dash clássico: pule livremente sobre obstáculos (ainda sincronizados à música) |
+| ⏱️ **Contagem 3-2-1** | Antes de iniciar, retomar do checkpoint, recomeçar ou "jogar de novo": contagem regressiva animada com a cena congelada no ponto de partida — a música (e o relógio do jogo) só começa no "go!" |
+| 🎵 **Padrões rítmicos** | O levelgen monta células de 1–2 batidas: *double* (dois pulos em sequência), *bloco+espinho* e *[pad, espinho]* (o pad estica o arco para **1,15 batidas** e carrega por cima do espinho) — com a garantia de **nenhuma batida ocupada duas vezes** |
 | 🎨 **Tema da música** | Paleta de cada seção derivada do centróide espectral (sinestesia visual) |
 | 🌆 **Visual synthwave** | Renderer canvas: sol pulsante na batida, 2 camadas de montanhas em parallax, grade em perspectiva pulsando com a música, cubo com gradiente/rosto/rastro neon, HUD translúcido |
 | 🧱 **Geração determinística** | A mesma música sempre gera o mesmo mapa (seed = hash da faixa) |
 | 📱 **PWA instalável** | Adicione à tela inicial (Android/iOS Safari) e jogue |
-| 🎮 **Gameplay** | Espinhos, blocos, pads (amarelos), orbs (air-jump), escudo 🛡️, coletáveis 💎 + multiplicador de combo (1x→2x→3x→4x) |
+| 🎮 **Gameplay** | Espinhos, blocos, pads (amarelos — arco esticado de **1,15 batidas**, física real), orbs (air-jump **a partir da altura atual**), escudo 🛡️, coletáveis 💎 + multiplicador de combo (1x→2x→3x→4x) |
 
 ## ▶️ Como rodar
 
@@ -185,6 +187,18 @@ licenciada |
 > O caminho real para o jogador: ele adiciona **o arquivo que já tem** (Minhas músicas) ou curte a
 > **prévia de 30s** da busca. Para o jogo ter "as famosas" de fábrica, seria necessário um acordo de
 > licenciamento (como Beat Saber/Rock Band fazem) — fora do alcance de um projeto independente.
+
+## 🆕 Desta versão
+
+- **Contagem regressiva 3-2-1** antes de iniciar/retomar (`src/game/countdown.js`, máquina de
+  estados pura e testada; overlay com números animados e "tick" sonoro a cada número).
+- **Sincronia clique↔batida**: janelas de julgamento musicais (`judgeWindowsForBeat`),
+  **linha de hit** na tela e glow dos obstáculos pulsando no acento da batida.
+- **Física real dos boosts**: pad estica o arco para **1,15 batidas** (`vy = 1,15·v`);
+  orb faz air-jump **da altura atual** (novo arco partindo de `player.y` — o antigo
+  "air-jump" teleportava o cubo para o chão).
+- **Padrões rítmicos no levelgen** (`RHYTHM_PATTERNS`): *double*, *bloco+espinho* e
+  *[pad, espinho]*, posicionados com a regra "sem beat ocupado duas vezes".
 
 ## 🚀 Próximos passos sugeridos
 

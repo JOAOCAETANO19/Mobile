@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { physicsForBpm, generateBeatGrid, generateLevel, findCheckpoint, JUMP_HEIGHT_CELLS } from '../src/game/levelgen.js';
+import { physicsForBpm, generateBeatGrid, generateLevel, findCheckpoint, JUMP_HEIGHT_CELLS, RHYTHM_PATTERNS } from '../src/game/levelgen.js';
 
 function fakeAnalysis(bpm, durationSec, sections) {
   return { bpm, durationSec, sections };
@@ -110,4 +110,40 @@ test('variedade de obstáculos: blocos frequentes em build, escudo em seções d
     build.obstacles.slice(0, 3).every((o) => o.type === 'spike'),
     'os 3 primeiros obstáculos devem ser espinhos'
   );
+});
+
+test('padrões rítmicos (double, bloco+espinho, [pad, espinho]): nenhum beat ocupado duas vezes', () => {
+  // (a) A própria tabela: os slots de cada padrão ocupam batidas distintas, dentro do alcance
+  for (const [name, pattern] of Object.entries(RHYTHM_PATTERNS)) {
+    const beatUses = pattern.slots.map((s) => Math.floor(s.offset));
+    assert.equal(new Set(beatUses).size, beatUses.length, `padrão "${name}" ocupa a mesma batida duas vezes`);
+    for (const b of beatUses) {
+      assert.ok(b >= 0 && b < pattern.beats, `padrão "${name}" com slot fora do alcance de ${pattern.beats} batidas`);
+    }
+  }
+
+  // (b) Geração: em um drop longo, nenhuma batida recebe dois obstáculos
+  const level = generateLevel(
+    fakeAnalysis(128, 32, [{ label: 'drop', start: 0, end: 32, color: '#222' }]),
+    { title: 'Patterns', artist: 'Rhythm' }
+  );
+  assert.ok(level.obstacles.length > 10, 'drop longo deveria ter obstáculos de sobra');
+
+  const byBeat = new Map();
+  for (const ob of level.obstacles) {
+    assert.ok(
+      !byBeat.has(ob.beatIndex),
+      `beat ${ob.beatIndex} ocupado duas vezes: ${byBeat.get(ob.beatIndex)} e ${ob.id}`
+    );
+    byBeat.set(ob.beatIndex, ob.id);
+  }
+
+  // (c) Os padrões de 2 batidas existem de fato no mapa gerado
+  const nextAt = (ob) => level.obstacles.find((o) => o.beatIndex === ob.beatIndex + 1);
+  const hasDouble = level.obstacles.some((ob) => ob.type === 'spike' && nextAt(ob)?.type === 'spike');
+  const hasBlockSpike = level.obstacles.some((ob) => ob.type === 'block' && nextAt(ob)?.type === 'spike');
+  const hasPadSpike = level.obstacles.some((ob) => ob.type === 'pad' && nextAt(ob)?.type === 'spike');
+  assert.ok(hasDouble, 'drop longo precisa ter "double" (dois pulos em sequência)');
+  assert.ok(hasBlockSpike, 'drop longo precisa ter "bloco+espinho"');
+  assert.ok(hasPadSpike, 'drop longo precisa ter "[pad, espinho]"');
 });
