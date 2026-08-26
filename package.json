@@ -1,0 +1,17 @@
+{
+  "name": "rhythm-dash",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Jogo mobile estilo Geometry Dash onde a musica gera o mapa.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test tests/*.test.js",
+    "server": "node server/server.mjs"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
+  }
+}
