@@ -1,7 +1,8 @@
 // Service worker mínimo: cacheia o app shell para permitir abrir offline (a análise de
 // áudio roda 100% no dispositivo, só a busca online precisa de rede).
-const CACHE_NAME = 'rhythm-dash-v1';
-const APP_SHELL = ['/', '/manifest.webmanifest'];
+const CACHE_NAME = 'rhythm-dash-v2';
+// Caminhos relativos: o app pode rodar em qualquer subcaminho (ex.: GitHub Pages).
+const APP_SHELL = ['./', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

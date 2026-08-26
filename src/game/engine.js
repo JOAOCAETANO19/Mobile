@@ -13,7 +13,34 @@ export const PLAYER_SCREEN_X_RATIO = 0.28; // posição fixa do jogador na tela 
 export const JUDGE = {
   PERFECT_MS: 60,
   GOOD_MS: 150,
+  PERFECT_BEAT_FRACTION: 0.12, // janela musical do PERFEITO: 12% da batida
+  GOOD_BEAT_FRACTION: 0.25, // janela musical do BOM: 25% da batida
   MISS_BEAT_FRACTION: 0.3, // tolerância total ~0.3 batida
+};
+
+/**
+ * Janelas de julgamento "musicais": cada uma é o mais restritivo entre o valor
+ * fixo (ms) e a fração proporcional à duração da batida — o feeling do clique
+ * em relação à batida é o mesmo em qualquer BPM.
+ */
+export function judgeWindowsForBeat(beatMs) {
+  return {
+    perfectMs: Math.min(JUDGE.PERFECT_MS, beatMs * JUDGE.PERFECT_BEAT_FRACTION),
+    goodMs: Math.min(JUDGE.GOOD_MS, beatMs * JUDGE.GOOD_BEAT_FRACTION),
+    missMs: beatMs * JUDGE.MISS_BEAT_FRACTION,
+  };
+}
+
+/**
+ * Física real dos boosts:
+ * - pad: estica o arco do pulo para 1,15 batidas (vy = 1,15·v → voo = 2·vy/g = 1,15·T);
+ * - orb: air-jump a partir da altura atual — novo arco começando em player.y
+ *   (sem teleport para o chão).
+ */
+export const BOOST = {
+  PAD_ARC_BEATS: 1.15,
+  ORB_VY_FACTOR: 0.8,
+  PAD_GROUND_EPS: 0.15, // "no chão" para ativar o pad (tolerância, em células)
 };
 
 export const MODE = { BEAT: 'beat', FREE: 'free' };
@@ -85,6 +112,7 @@ export class GameEngine {
       vy: 0,
       jumping: false,
       jumpStart: 0,
+      jumpOffset: 0, // altura base do arco atual (0 no chão; altura atual no air-jump do orb)
       rotation: 0,
       squash: 1,
       dead: false,
@@ -155,6 +183,7 @@ export class GameEngine {
       if (!this.player.jumping) {
         this.player.jumping = true;
         this.player.jumpStart = currentTime;
+        this.player.jumpOffset = 0;
         this.player.vy = this.freeGravity.v;
         this.callbacks.onTapVisual?.();
       }
@@ -168,19 +197,19 @@ export class GameEngine {
     const deltaMs = (currentTime - beat.time) * 1000;
     const absMs = Math.abs(deltaMs);
     const beatDurationMs = this.physics.T * 1000;
-    const missToleranceMs = beatDurationMs * JUDGE.MISS_BEAT_FRACTION;
+    const windows = judgeWindowsForBeat(beatDurationMs); // tolerância musical
 
-    if (absMs > missToleranceMs) {
+    if (absMs > windows.missMs) {
       // Toque fora de janela: não pula (evita "spam"), mas não pune combo diretamente.
       return;
     }
 
     let judge = 'GOOD';
-    if (absMs <= JUDGE.PERFECT_MS) judge = 'PERFECT';
-    else if (absMs <= JUDGE.GOOD_MS) judge = 'GOOD';
+    if (absMs <= windows.perfectMs) judge = 'PERFECT';
 
     this.player.jumping = true;
     this.player.jumpStart = beat.time; // snap: o arco sempre começa exatamente na batida
+    this.player.jumpOffset = 0;
     this.player.vy = this.physics.v;
     this.player.landedBeatIndex = beat.index;
 
@@ -194,20 +223,22 @@ export class GameEngine {
     const p = this.player;
     if (p.jumping) {
       const t = currentTime - p.jumpStart;
-      const { v, g, T } = this.mode === MODE.FREE
-        ? { v: this.freeGravity.v, g: this.freeGravity.g, T: null }
-        : this.physics;
+      const g = this.mode === MODE.FREE ? this.freeGravity.g : this.physics.g;
 
-      const y = v * t - 0.5 * g * t * t;
+      // Arco parábólico a partir da altura base (jumpOffset): pulo normal do chão,
+      // pad esticado (1,15 batidas) ou air-jump do orb (que parte da altura atual).
+      const y = p.jumpOffset + p.vy * t - 0.5 * g * t * t;
       if (y <= 0 && t > 0.02) {
         p.y = GROUND_Y;
         p.jumping = false;
+        p.jumpOffset = 0;
         p.rotation = Math.round(p.rotation / 90) * 90; // aterrissa "de pé"
         p.squash = 1.3; // squash na aterrissagem
       } else {
         p.y = Math.max(0, y);
-        // Rotação: 90° por pulo no modo batida; contínua e proporcional no modo livre.
-        const total = this.mode === MODE.FREE ? Math.max(0.3, t * 2) : T;
+        // Rotação: 90° por arco no modo batida (o arco dura 2·vy/g — 1 batida no
+        // pulo normal, 1,15 no pad, mais curto no air-jump); contínua no modo livre.
+        const total = this.mode === MODE.FREE ? Math.max(0.3, t * 2) : (2 * p.vy) / g;
         const progress = Math.min(1, t / total);
         p.rotation = progress * 90;
         p.squash = 1 - Math.min(0.25, y * 0.05); // estica levemente no ar
@@ -272,18 +303,25 @@ export class GameEngine {
       }
 
       if (ob.type === 'pad' || ob.type === 'orb') {
-        // Pads/orbs dão impulso extra em vez de matar.
+        // Pads/orbs dão impulso extra em vez de matar — com física real:
+        // o novo arco parte exatamente de onde o jogador está.
         if (dx < 0.45) {
-          this.hitObstacleIds.add(ob.id);
-          if (ob.type === 'orb' && this.player.jumping) {
-            this.player.jumpStart = currentTime; // air-jump: reinicia o arco no ar
-            this.player.vy = this.physics.v * 0.8;
-            this.callbacks.onOrb?.();
-          } else if (ob.type === 'pad') {
-            this.player.jumping = true;
-            this.player.jumpStart = currentTime;
-            this.player.vy = this.physics.v * 1.1;
-            this.callbacks.onOrb?.();
+          const p = this.player;
+          if (ob.type === 'orb' && p.jumping) {
+            // Air-jump da altura atual: novo arco começando em p.y (sem teleport).
+            this.hitObstacleIds.add(ob.id);
+            p.jumpOffset = p.y;
+            p.jumpStart = currentTime;
+            p.vy = this.physics.v * BOOST.ORB_VY_FACTOR;
+            this.callbacks.onOrb?.(ob);
+          } else if (ob.type === 'pad' && (!p.jumping || p.y <= BOOST.PAD_GROUND_EPS)) {
+            // Pad estica o arco para 1,15 batidas: tempo de voo = 2·vy/g = 1,15·T.
+            this.hitObstacleIds.add(ob.id);
+            p.jumping = true;
+            p.jumpOffset = 0;
+            p.jumpStart = currentTime;
+            p.vy = this.physics.v * BOOST.PAD_ARC_BEATS;
+            this.callbacks.onOrb?.(ob);
           }
         }
         continue;

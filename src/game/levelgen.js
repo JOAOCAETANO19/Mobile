@@ -40,6 +40,55 @@ const OBSTACLE_TYPES = ['spike', 'block', 'pad', 'orb', 'shield'];
 const INTRO_SPIKE_BEATS = 3; // abertura previsível: os 3 primeiros obstáculos são espinhos
 const MIN_SHIELD_GAP_BEATS = 16; // não empilhar escudos: intervalo mínimo entre um e outro
 
+/**
+ * Padrões rítmicos: "células" de 1–2 batidas com obstáculos plantados no meio de
+ * cada batida ocupada (offset 0.5 = pico do pulo daquela batida):
+ * - single:     o clássico — 1 obstáculo (tipo decidido pelos pesos da seção);
+ * - double:     dois pulos em sequência (dupla batida, "double tap");
+ * - blockSpike: bloco seguido de espinho (2 batidas);
+ * - padSpike:   [pad, espinho] — o pad estica o arco para 1,15 batidas e carrega
+ *               o jogador por cima do espinho da batida seguinte.
+ * A garantia "sem beat ocupado duas vezes" vem do posicionador: um padrão só
+ * começa quando as batidas que ele ocupa estão livres, e o próximo início só
+ * acontece depois das batidas ocupadas + o intervalo de densidade da seção.
+ */
+export const RHYTHM_PATTERNS = {
+  single: { beats: 1, slots: [{ offset: 0.5, type: null }] }, // type null = pesos da seção
+  double: { beats: 2, slots: [{ offset: 0.5, type: 'spike' }, { offset: 1.5, type: 'spike' }] },
+  blockSpike: { beats: 2, slots: [{ offset: 0.5, type: 'block' }, { offset: 1.5, type: 'spike' }] },
+  padSpike: { beats: 2, slots: [{ offset: 0.5, type: 'pad' }, { offset: 1.5, type: 'spike' }] },
+};
+
+/** Pesos do sorteio do padrão por seção (o drop é o mais "rítmico"; o build
+ *  privilegia single/bloco para manter a "variedade" de blocos da seção). */
+const PATTERN_WEIGHTS = {
+  drop: { single: 50, double: 16, blockSpike: 17, padSpike: 17 },
+  build: { single: 76, double: 6, blockSpike: 10, padSpike: 8 },
+  flow: { single: 82, double: 0, blockSpike: 9, padSpike: 9 },
+};
+const DEFAULT_PATTERN_WEIGHTS = PATTERN_WEIGHTS.flow;
+
+/** Sorteia o padrão rítmico determinísticamente (RNG injetado). */
+function pickPattern(rng, sectionLabel, obstaclesPlaced, beatsLeft) {
+  if (obstaclesPlaced < INTRO_SPIKE_BEATS) return 'single';
+  const weights = PATTERN_WEIGHTS[sectionLabel] || DEFAULT_PATTERN_WEIGHTS;
+  const candidates = [];
+  let total = 0;
+  for (const [name, weight] of Object.entries(weights)) {
+    if (weight <= 0) continue;
+    if (RHYTHM_PATTERNS[name].beats > beatsLeft) continue; // padrão não cabe no fim do nível
+    candidates.push([name, weight]);
+    total += weight;
+  }
+  if (!candidates.length) return 'single';
+  let roll = rng() * total;
+  for (const [name, weight] of candidates) {
+    roll -= weight;
+    if (roll < 0) return name;
+  }
+  return candidates[candidates.length - 1][0];
+}
+
 /** Sorteia o tipo do obstáculo determinísticamente (RNG injetado). */
 function pickObstacleType(rng, sectionLabel, obstaclesPlaced, beatsSinceLastShield) {
   if (obstaclesPlaced < INTRO_SPIKE_BEATS) return 'spike';
@@ -96,33 +145,43 @@ export function generateLevel(analysis, track = {}) {
   const obstacles = [];
   const collectibles = [];
 
-  let beatsSinceLastObstacle = 0;
+  let nextPlaceBeat = 0; // primeira batida onde um novo padrão pode começar
   let beatsSinceLastShield = Infinity;
 
   for (let i = 0; i < beats.length; i++) {
     const beat = beats[i];
     const section = sectionAt(sections, beat.time) || { label: 'flow', color: '#7c5cff' };
     const density = SECTION_DENSITY[section.label] ?? 2;
-    beatsSinceLastObstacle++;
     beatsSinceLastShield++;
 
-    if (density > 0 && beatsSinceLastObstacle >= density) {
-      beatsSinceLastObstacle = 0;
-      // Obstáculo plantado no meio da batida = pico do arco do pulo seguinte.
-      const spikeTime = beat.time + T / 2;
+    // Padrão rítmico (1–2 batidas). "Sem beat ocupado duas vezes": o padrão só
+    // começa quando as batidas que ele ocupa estão livres (i >= nextPlaceBeat),
+    // e o próximo início é empurrado para além das batidas ocupadas + o
+    // intervalo de densidade da seção.
+    if (density > 0 && i >= nextPlaceBeat) {
+      const patternName = pickPattern(rng, section.label, obstacles.length, beats.length - i);
+      const pattern = RHYTHM_PATTERNS[patternName];
 
-      const type = pickObstacleType(rng, section.label, obstacles.length, beatsSinceLastShield);
-      if (type === 'shield') beatsSinceLastShield = 0;
+      for (const slot of pattern.slots) {
+        const slotBeatIndex = i + Math.floor(slot.offset); // batida ocupada pelo slot
+        const slotTime = beats[slotBeatIndex].time + T * (slot.offset - Math.floor(slot.offset));
+        const type =
+          slot.type || pickObstacleType(rng, section.label, obstacles.length, beatsSinceLastShield);
+        if (type === 'shield') beatsSinceLastShield = 0;
 
-      obstacles.push({
-        id: `ob_${i}`,
-        type,
-        time: spikeTime,
-        beatIndex: i,
-        section: section.label,
-        color: section.color || '#7c5cff',
-        glow: section.glow || '#b39dff',
-      });
+        // Obstáculo plantado no meio da batida = pico do arco do pulo daquela batida.
+        obstacles.push({
+          id: `ob_${i}_${slotBeatIndex}`,
+          type,
+          time: slotTime,
+          beatIndex: slotBeatIndex,
+          section: section.label,
+          color: section.color || '#7c5cff',
+          glow: section.glow || '#b39dff',
+        });
+      }
+
+      nextPlaceBeat = i + pattern.beats + (density - 1);
 
       // Coletável ocasional (diamante) entre obstáculos, fora da linha de colisão do pulo.
       if (rng() > 0.75) {

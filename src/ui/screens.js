@@ -34,8 +34,25 @@ export class Screens {
     this.els.overlay.classList.remove('hidden');
   }
 
+  /** Overlay mais leve (a cena congelada aparece por trás) para a contagem 3-2-1. */
+  showCountdown(html) {
+    this.els.overlay.innerHTML = html;
+    this.els.overlay.classList.remove('hidden');
+    this.els.overlay.classList.add('overlay-countdown');
+  }
+
   hideOverlay() {
     this.els.overlay.classList.add('hidden');
+    this.els.overlay.classList.remove('overlay-countdown');
+  }
+
+  countdownHtml(number, label) {
+    return `
+      <div class="countdown-box">
+        ${label ? `<p class="countdown-label">${label}</p>` : ''}
+        <div class="countdown-num">${number}</div>
+      </div>
+    `;
   }
 
   renderSearchResults(container, groups, onPick) {

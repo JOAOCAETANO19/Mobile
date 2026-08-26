@@ -14,6 +14,7 @@ import {
 import { analyzeAudioBuffer } from './core/analysis.js';
 import { generateLevel } from './game/levelgen.js';
 import { GameEngine, MODE, CELLS_PER_BEAT, multiplierForCombo, PLAYER_SCREEN_X_RATIO } from './game/engine.js';
+import { Countdown } from './game/countdown.js';
 import { Renderer } from './game/renderer.js';
 import { sfx, vibrate } from './game/fx.js';
 import { createDemoTrackBuffer, DEMO_TRACK_META } from './demo/demotrack.js';
@@ -30,6 +31,12 @@ let rafId = null;
 let judgeState = { text: '', alpha: 0 };
 let milestoneState = { text: '', alpha: 0 };
 let lastFrameTime = performance.now();
+
+// Contagem regressiva 3-2-1 antes de iniciar/retomar (cenário congelado no ponto de partida).
+let countdownActive = false;
+let countdown = null;
+let pendingStartTime = 0;
+let loopRunning = false; // garante UMA única cadeia de requestAnimationFrame
 
 /** Posição de tela do centro do cubo (para partículas de efeito). */
 function playerScreenPos() {
@@ -297,14 +304,48 @@ function startGame(audioBuffer, lvl) {
     togglePause();
   });
 
-  player.play(0);
+  // A música só começa após a contagem regressiva 3-2-1.
   lastFrameTime = performance.now();
-  loop();
+  beginCountdown(0, 'Prepare-se!');
+  ensureLoop();
+}
+
+/**
+ * Contagem regressiva 3-2-1 antes de iniciar/retomar: a cena fica congelada no
+ * ponto de partida e o áudio (única fonte de verdade do tempo) só começa no fim.
+ */
+function beginCountdown(startTime, label) {
+  pendingStartTime = startTime;
+  countdownActive = true;
+  countdown = new Countdown({
+    onNumber: (n) => {
+      screens.showCountdown(screens.countdownHtml(n, label));
+      sfx.countdownTick();
+    },
+    onDone: () => {
+      countdownActive = false;
+      countdown = null;
+      screens.hideOverlay();
+      sfx.countdownGo();
+      player.play(pendingStartTime);
+      lastFrameTime = performance.now();
+    },
+  });
+  countdown.start(performance.now());
+}
+
+/** Garante uma única cadeia de rAF (retry/retomar não criam loops paralelos). */
+function ensureLoop() {
+  if (!loopRunning) {
+    loopRunning = true;
+    lastFrameTime = performance.now();
+    rafId = requestAnimationFrame(loop);
+  }
 }
 
 function onTap() {
   if (!engine || !player) return;
-  if (engine.player.dead || engine.finished) return;
+  if (countdownActive || engine.player.dead || engine.finished) return;
   engine.tap(player.getCurrentTime());
   sfx.jump();
 }
@@ -316,6 +357,7 @@ function onKeydown(e) {
 
 let paused = false;
 function togglePause() {
+  if (countdownActive) return; // sem pausar no meio da contagem 3-2-1
   if (!engine || engine.player.dead || engine.finished) return;
   paused = !paused;
   if (paused) {
@@ -341,16 +383,14 @@ function wireDeathOverlay(checkpoint) {
   app.querySelector('#btn-resume-checkpoint')?.addEventListener('click', () => {
     screens.hideOverlay();
     engine.reset(checkpoint.time);
-    player.play(checkpoint.time);
-    lastFrameTime = performance.now();
-    loop();
+    beginCountdown(checkpoint.time, `Retomando do ${checkpoint.label.toUpperCase()} · ${checkpoint.progressPct}%`);
+    ensureLoop();
   });
   app.querySelector('#btn-restart')?.addEventListener('click', () => {
     screens.hideOverlay();
     engine.reset(0);
-    player.play(0);
-    lastFrameTime = performance.now();
-    loop();
+    beginCountdown(0, 'Recomeçando…');
+    ensureLoop();
   });
   app.querySelector('#btn-quit')?.addEventListener('click', quitToMenu);
 }
@@ -359,15 +399,17 @@ function wireFinishOverlay() {
   app.querySelector('#btn-play-again')?.addEventListener('click', () => {
     screens.hideOverlay();
     engine.reset(0);
-    player.play(0);
-    lastFrameTime = performance.now();
-    loop();
+    beginCountdown(0, 'De novo!');
+    ensureLoop();
   });
   app.querySelector('#btn-quit')?.addEventListener('click', quitToMenu);
 }
 
 function quitToMenu() {
+  countdownActive = false;
+  countdown = null;
   cancelAnimationFrame(rafId);
+  loopRunning = false;
   player?.stop();
   screens.hideOverlay();
   screens.show('home');
@@ -381,13 +423,24 @@ function loop() {
   const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
   lastFrameTime = now;
 
+  judgeState.alpha = Math.max(0, judgeState.alpha - dt * 1.5);
+  milestoneState.alpha = Math.max(0, milestoneState.alpha - dt * 0.9);
+
+  // Contagem 3-2-1 ativa: cena congelada no ponto de partida (a música começa no onDone).
+  if (countdownActive && countdown) {
+    countdown.update(now);
+    renderFrame(pendingStartTime);
+    return;
+  }
+
   const currentTime = player.getCurrentTime();
   engine.update(currentTime, dt, renderer.widthCells);
   renderer.updateShake(dt);
 
-  judgeState.alpha = Math.max(0, judgeState.alpha - dt * 1.5);
-  milestoneState.alpha = Math.max(0, milestoneState.alpha - dt * 0.9);
+  renderFrame(currentTime);
+}
 
+function renderFrame(currentTime) {
   const section = engine.level.sections.find((s) => currentTime >= s.start && currentTime < s.end);
   const beat = engine.nearestBeat(currentTime);
   const beatProgress = 1 - Math.min(1, Math.abs(beat.time - currentTime) / (engine.physics.T / 2));
@@ -397,12 +450,13 @@ function loop() {
   renderer.beginScene();
   renderer.drawBackground(section, beatProgress, currentTime, worldX);
   renderer.drawGround(section, beatProgress, worldX);
+  renderer.drawHitLine(beatProgress, section?.glow || '#4dffea');
 
   for (const col of engine.getVisibleCollectibles(currentTime, renderer.widthCells)) {
     renderer.drawCollectible(col, currentTime);
   }
   for (const ob of engine.getVisibleObstacles(currentTime, renderer.widthCells)) {
-    renderer.drawObstacle(ob, currentTime);
+    renderer.drawObstacle(ob, currentTime, beatProgress);
   }
   renderer.drawPlayer(engine.player, engine.mode === MODE.BEAT ? beatProgress : null, {
     trail: engine.trail,
@@ -431,7 +485,7 @@ function loop() {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
 }
 
