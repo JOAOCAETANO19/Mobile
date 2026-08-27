@@ -228,13 +228,16 @@ licenciada |
   guardado por 180 ms e pula no instante da aterrissagem (julgado nesse momento);
   e **todo toque no chão pula** (estilo Geometry Dash) — fora da janela musical só
   não pontua/julga. Fim do "cliquei e não pulou".
-- **Editor de mapas** 🛠️ (`src/ui/editor.js` + `src/game/mapstore.js`): linha do
-  tempo da música com as seções coloridas; toque adiciona espinho/bloco/pad/orb/
-  escudo/moeda (encaixe na meia-batida), toque no item apaga, arrastar rola.
-  Botões **Testar** (joga na hora com a mesma música), **Salvar** (vale sempre
-  para aquela música, no aparelho) e **Link** (compartilha o mapa via URL —
-  `?mapa=…` base64). **Temas visuais** por música (Neon, Pôr-do-sol, Oceano,
-  Vulcão, Matrix) recolorem cenário e obstáculos, tudo procedural em Canvas.
+- **Gerador musical v2** 🎼 (`src/game/levelgen.js`): o mapa nasce da própria
+  música — batidas reais (onsets) e sua **força** guiam o jogo: acento forte
+  vira blocão/sequência de dois pulos, silêncio dá descanso (fora do drop),
+  a 1ª batida de cada DROP recebe um obstáculo de impacto, o BUILD densifica
+  em rampa, a frase respira 1 batida a cada 2 compassos e as moedas nas partes
+  calmas seguem os acentos da melodia. Determinístico: mesma música = mesmo mapa.
+- **Temas visuais** 🎨 (`src/game/themes.js`): Neon, Pôr-do-sol, Oceano, Vulcão
+  e Matrix recolorem cenário e obstáculos (procedural em Canvas). Escolha nas
+  ⚙️ configurações; **Automático** usa as cores que a própria análise da música
+  define por seção.
 
 ## 🚀 Próximos passos sugeridos
 

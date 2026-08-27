@@ -67,6 +67,66 @@ test('generateLevel planta espinhos no meio da batida (beat + T/2)', () => {
   }
 });
 
+test('gerador musical: entrada de drop ganha obstáculo de impacto (bloco)', () => {
+  const T = physicsForBpm(120).T;
+  const analysis = fakeAnalysis(120, 8, [
+    { label: 'intro', start: 0, end: 2, color: '#000' },
+    { label: 'drop', start: 2, end: 8, color: '#000' },
+  ]);
+  const level = generateLevel(analysis, { title: 'X', artist: 'Y' });
+  assert.ok(level.obstacles.length > 0);
+  // 1ª batida jogável do drop (tempo 2.0) → obstáculo no meio DELA (2.0 + T/2), tipo bloco.
+  const impact = level.obstacles[0];
+  assert.equal(impact.type, 'block');
+  assert.ok(Math.abs(impact.time - (2 + T / 2)) < 1e-9, `impacto em ${impact.time}`);
+});
+
+test('gerador musical: trecho com onsets gera mais obstáculos que silêncio', () => {
+  const sections = [{ label: 'flow', start: 0, end: 12, color: '#000' }];
+  const base = { bpm: 120, durationSec: 12, sections };
+  const track = { title: 'M', artist: 'N' };
+  const { T } = physicsForBpm(120);
+  const dense = { ...base, onsets: generateBeatGrid(120, 12).map((b) => ({ time: b.time + T / 2, strength: 0.4 })) };
+  const sparse = { ...base, onsets: [{ time: 0.25, strength: 0.4 }] }; // música quase vazia
+  const nDense = generateLevel(dense, track).obstacles.length;
+  const nSparse = generateLevel(sparse, track).obstacles.length;
+  assert.ok(nDense > nSparse, `cheio (${nDense}) deveria ter mais obstáculos que vazio (${nSparse})`);
+});
+
+test('gerador musical: acentos fortes viram blocos (e duplas), preservando meio da batida', () => {
+  const sections = [{ label: 'flow', start: 0, end: 12, color: '#000' }];
+  const { T } = physicsForBpm(120);
+  const analysis = {
+    bpm: 120,
+    durationSec: 12,
+    sections,
+    onsets: generateBeatGrid(120, 12).map((b) => ({ time: b.time + T / 2, strength: 0.9 })),
+  };
+  const level = generateLevel(analysis, { title: 'F', artist: 'G' });
+  const blocks = level.obstacles.filter((o) => o.type === 'block');
+  assert.ok(blocks.length >= 2, 'acentos fortes deveriam promover blocos');
+  for (const ob of level.obstacles) {
+    const beat = level.beats[ob.beatIndex];
+    assert.ok(Math.abs(ob.time - (beat.time + T / 2)) < 1e-9); // sempre no pico do pulo
+  }
+});
+
+test('gerador musical: moedas nas partes calmas seguem acentos da melodia', () => {
+  const analysis = fakeAnalysis(120, 6, [{ label: 'break', start: 0, end: 6, color: '#000' }]);
+  analysis.onsets = [
+    { time: 1.0, strength: 0.8 },
+    { time: 1.1, strength: 0.9 }, // perto demais da anterior → agrupa
+    { time: 3.4, strength: 0.7 },
+    { time: 3.6, strength: 0.3 }, // fraca → ignorada
+  ];
+  const level = generateLevel(analysis, { title: 'Q', artist: 'W' });
+  assert.equal(level.obstacles.length, 0); // break segue sem obstáculos
+  assert.deepEqual(
+    level.collectibles.map((c) => c.time),
+    [1.0, 3.4]
+  );
+});
+
 test('findCheckpoint retorna o início da seção correta e progresso em %', () => {
   const level = {
     durationSec: 100,

@@ -55,7 +55,6 @@
           </label>
           <button id="demo-btn" class="secondary">🎮 Demo 128 BPM</button>
           <button id="install-btn" class="secondary hidden">📲 Instalar app</button>
-          <button id="editor-btn" class="secondary hidden">🛠️ Editor de mapas</button>
         </div>
 
         <div id="home-records" class="records hidden"></div>
@@ -71,6 +70,18 @@
             <select id="mode-select">
               <option value="beat">🎯 Modo Batida (recomendado)</option>
               <option value="free">🕹️ Modo Livre</option>
+            </select>
+          </label>
+
+          <label>
+            Tema visual:
+            <select id="theme-select">
+              <option value="auto">🌈 Automático (da própria música)</option>
+              <option value="neon">💜 Neon</option>
+              <option value="sunset">🌇 Pôr-do-sol</option>
+              <option value="ocean">🌊 Oceano</option>
+              <option value="vulcao">🌋 Vulcão</option>
+              <option value="matrix">🟢 Matrix</option>
             </select>
           </label>
 
@@ -126,43 +137,6 @@
       <canvas id="game-canvas"></canvas>
       <div id="song-badge" class="song-badge hidden"></div>
       <button id="pause-btn" class="pause-btn" aria-label="Pausar">⏸</button>
-    </section>
-
-    <section id="screen-editor" class="screen hidden">
-      <header class="editor-top">
-        <h2 id="editor-title">🛠️ Editor de mapas</h2>
-        <button id="editor-close" class="editor-x" aria-label="Fechar editor">✕</button>
-      </header>
-      <div class="editor-tools" id="editor-tools">
-        <button data-tool="spike" class="active">🔺 Espinho</button>
-        <button data-tool="block">🟪 Bloco</button>
-        <button data-tool="pad">🟡 Pad</button>
-        <button data-tool="orb">🔵 Orb</button>
-        <button data-tool="shield">🛡️ Escudo</button>
-        <button data-tool="coin">💎 Moeda</button>
-      </div>
-      <div class="editor-bar">
-        <label class="editor-theme-label">
-          Tema:
-          <select id="editor-theme">
-            <option value="auto">🌈 Automático (da análise)</option>
-            <option value="neon">💜 Neon</option>
-            <option value="sunset">🌇 Pôr-do-sol</option>
-            <option value="ocean">🌊 Oceano</option>
-            <option value="vulcao">🌋 Vulcão</option>
-            <option value="matrix">🟢 Matrix</option>
-          </select>
-        </label>
-        <button id="editor-test" class="btn-primary">▶ Testar</button>
-        <button id="editor-save" class="secondary">💾 Salvar</button>
-        <button id="editor-share" class="secondary">🔗 Link</button>
-        <button id="editor-reset" class="secondary">↺ Auto</button>
-      </div>
-      <canvas id="editor-canvas"></canvas>
-      <p class="hint editor-hint">
-        Toque na linha para adicionar (encaixa na meia-batida) · toque no item para apagar ·
-        arraste para rolar. As faixas coloridas são as seções (BUILD, DROP…); o tema já aparece nelas.
-      </p>
     </section>
 
     <div id="overlay" class="overlay hidden"></div>

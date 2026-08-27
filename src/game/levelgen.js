@@ -136,6 +136,17 @@ export function generateBeatGrid(bpm, durationSec, startOffset = 0) {
  * Gera os obstáculos do nível: espinhos plantados no meio da batida (pico do pulo),
  * com densidade dependente da seção musical, e coletáveis distribuídos com o RNG determinístico.
  */
+/**
+ * O mapa nasce DA MÚSICA: a análise traz onsets (batidas reais com força), e o
+ * gerador traduz isso em jogo —
+ * - batida real FORTE  → intensifica (dupla/bloco);
+ * - silêncio no trecho → o mapa descansa junto (fora do drop);
+ * - entrada de DROP    → obstáculo de impacto obrigatório (o "uau" da música);
+ * - build              → rampa de densidade (esquenta até o drop);
+ * - respira de frase   → 1 batida livre a cada 8 fora do drop;
+ * - moedas             → arcos coroando acentos; nas partes calmas seguem a melodia.
+ * Tudo determinístico: mesma análise + mesma seed → sempre o mesmo mapa.
+ */
 export function generateLevel(analysis, track = {}) {
   const { bpm, sections, durationSec } = analysis;
   const { T } = physicsForBpm(bpm);
@@ -145,28 +156,75 @@ export function generateLevel(analysis, track = {}) {
   const obstacles = [];
   const collectibles = [];
 
+  // Escuta musical: onsets (batidas reais) com força 0..1, vindos da análise.
+  // Sem dados de onsets → regras musicais neutras (comportamento clássico).
+  const onsets = Array.isArray(analysis.onsets) && analysis.onsets.length ? analysis.onsets : null;
+  let onsetCursor = 0;
+  const onsetStrengthAt = (t) => {
+    if (!onsets) return null;
+    const tol = Math.min(0.12, T * 0.25);
+    // Cursor anda para trás/para frente até a janela [t-tol, t+tol].
+    while (onsetCursor > 0 && onsets[onsetCursor - 1].time >= t - tol) onsetCursor--;
+    while (onsetCursor < onsets.length && onsets[onsetCursor].time < t - tol) onsetCursor++;
+    let best = 0;
+    for (let j = onsetCursor; j < onsets.length && onsets[j].time <= t + tol; j++) {
+      best = Math.max(best, onsets[j].strength ?? 1);
+    }
+    return best;
+  };
+
   let nextPlaceBeat = 0; // primeira batida onde um novo padrão pode começar
   let beatsSinceLastShield = Infinity;
+  const impactedDrops = new Set(); // drops que já receberam seu obstáculo de impacto
 
   for (let i = 0; i < beats.length; i++) {
     const beat = beats[i];
     const section = sectionAt(sections, beat.time) || { label: 'flow', color: '#7c5cff' };
-    const density = SECTION_DENSITY[section.label] ?? 2;
+    let density = SECTION_DENSITY[section.label] ?? 2;
     beatsSinceLastShield++;
 
-    // Padrão rítmico (1–2 batidas). "Sem beat ocupado duas vezes": o padrão só
-    // começa quando as batidas que ele ocupa estão livres (i >= nextPlaceBeat),
-    // e o próximo início é empurrado para além das batidas ocupadas + o
-    // intervalo de densidade da seção.
-    if (density > 0 && i >= nextPlaceBeat) {
-      const patternName = pickPattern(rng, section.label, obstacles.length, beats.length - i);
+    // Build em rampa: a segunda metade do build densifica conforme o drop se aproxima.
+    if (section.label === 'build' && section.end > section.start) {
+      const frac = (beat.time - section.start) / (section.end - section.start);
+      if (frac > 0.55) density = Math.max(1, density - 1);
+    }
+
+    // Respira de frase: 1 batida livre a cada 8 (2 compassos), fora do drop.
+    const isRestBeat =
+      section.label !== 'drop' && i % 8 === 7 && obstacles.length > INTRO_SPIKE_BEATS;
+
+    if (density > 0 && i >= nextPlaceBeat && !isRestBeat) {
+      const slotMid = beat.time + T * 0.5;
+      const strength = onsetStrengthAt(slotMid); // null quando não há dados
+      const firstPlacements = obstacles.length < INTRO_SPIKE_BEATS;
+
+      // Sem batida real perto: a música está vazia aqui — o mapa descansa junto
+      // (55% de chance de pular; fora do drop, que sempre mantém a pressão).
+      if (strength === 0 && !firstPlacements && section.label !== 'drop' && rng() < 0.55) {
+        continue;
+      }
+
+      // Impacto do drop: a 1ª batida jogável de CADA drop sempre recebe obstáculo
+      // marcante (bloco) — é o momento "uau" da música.
+      const beatIsDropStart =
+        section.label === 'drop' && beat.time - section.start < T && !impactedDrops.has(section.start);
+      if (beatIsDropStart) impactedDrops.add(section.start);
+
+      let patternName = pickPattern(rng, section.label, obstacles.length, beats.length - i);
+      if (beatIsDropStart) patternName = 'single';
+      else if (strength != null && strength >= 0.66 && !firstPlacements && beats.length - i >= 2 && section.label !== 'build') {
+        patternName = 'double'; // acento forte vira sequência de dois pulos
+      }
+
       const pattern = RHYTHM_PATTERNS[patternName];
 
       for (const slot of pattern.slots) {
         const slotBeatIndex = i + Math.floor(slot.offset); // batida ocupada pelo slot
         const slotTime = beats[slotBeatIndex].time + T * (slot.offset - Math.floor(slot.offset));
-        const type =
+        let type =
           slot.type || pickObstacleType(rng, section.label, obstacles.length, beatsSinceLastShield);
+        if (beatIsDropStart && type !== 'shield') type = 'block';
+        else if (strength != null && strength >= 0.66 && !slot.type && type === 'spike') type = 'block';
         if (type === 'shield') beatsSinceLastShield = 0;
 
         // Obstáculo plantado no meio da batida = pico do arco do pulo daquela batida.
@@ -183,8 +241,17 @@ export function generateLevel(analysis, track = {}) {
 
       nextPlaceBeat = i + pattern.beats + (density - 1);
 
-      // Coletável ocasional (diamante) entre obstáculos, fora da linha de colisão do pulo.
-      if (rng() > 0.75) {
+      // Moedas: arcos de 3 coroando acentos fortes da música; senão, solitária ocasional.
+      const coinRoll = rng();
+      if (coinRoll > 0.9 && strength != null && strength >= 0.5 && beat.time + T * 1.25 < durationSec) {
+        for (let k = 0; k < 3; k++) {
+          collectibles.push({
+            id: `col_${i}_${k}`,
+            time: beat.time + T * (0.25 + k * 0.5),
+            section: section.label,
+          });
+        }
+      } else if (coinRoll > 0.75) {
         collectibles.push({
           id: `col_${i}`,
           time: beat.time + T * 0.25,
@@ -192,6 +259,21 @@ export function generateLevel(analysis, track = {}) {
         });
       }
     }
+  }
+
+  // Nas partes calmas (intro/break/outro), as moedas seguem os acentos reais
+  // da melodia — trilha sonora virando trilha de diamantes.
+  if (onsets) {
+    let lastCoinTime = -Infinity;
+    for (const o of onsets) {
+      const s = sectionAt(sections, o.time);
+      if (!s || (SECTION_DENSITY[s.label] ?? 2) !== 0) continue;
+      if ((o.strength ?? 0) < 0.55) continue;
+      if (o.time - lastCoinTime < T * 1.5) continue;
+      collectibles.push({ id: `col_m_${collectibles.length}`, time: o.time, section: s.label });
+      lastCoinTime = o.time;
+    }
+    collectibles.sort((a, b) => a.time - b.time);
   }
 
   return {
