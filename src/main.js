@@ -23,6 +23,16 @@ import { emptyTurma, normalizePlayerName, restartRound, sortTurmaResults, medalF
 import { getAudioOffsetMs, setAudioOffsetMs, averageOffset, matchTapsToTicks } from './core/latency.js';
 import { trackKey, loadStats, saveStats, applyRunToStats, topPlayed } from './game/stats.js';
 import { sampleGhost, ghostYAt, saveGhostFor, loadGhostFor } from './game/ghost.js';
+import {
+  mapFromLevel,
+  applyMapToLevel,
+  encodeMap,
+  decodeMap,
+  saveMapFor,
+  loadMapFor,
+  deleteMapFor,
+} from './game/mapstore.js';
+import { MapEditor } from './ui/editor.js';
 
 const app = document.querySelector('#app');
 const screens = new Screens(app);
@@ -54,6 +64,21 @@ let ghostRec = []; // amostras [t, y] da corrida atual (para o fantasma)
 let ghostBest = null; // fantasma carregado da melhor corrida DESTA música
 let deferredInstallPrompt = null; // evento beforeinstallprompt guardado
 let calibration = null; // calibração de latência em andamento
+let editorCtl = null; // controlador do editor de mapas
+let lastAutoLevel = null; // nível gerado pela análise (sem edições) — base do "↺ Auto"
+let pendingSharedMap = null; // mapa recebido por link (?mapa=...)
+
+// Mapa compartilhado por link: ?mapa=…&faixa=… — decodifica e guarda até a música certa tocar.
+try {
+  const params = new URLSearchParams(location.search);
+  if (params.get('mapa')) {
+    const data = decodeMap(params.get('mapa'));
+    if (data) pendingSharedMap = { data, faixa: params.get('faixa') || '' };
+    history.replaceState?.(null, '', location.pathname); // limpa a URL para não reaplicar no refresh
+  }
+} catch {
+  /* sem URLSearchParams/history — ignora link */
+}
 
 /** Estado da turma salvo no aparelho (sobrevive a refresh). */
 function loadTurma() {
@@ -258,9 +283,29 @@ async function runAnalysisAndStart(audioBuffer, trackMeta) {
   const analysis = analyzeAudioBuffer(audioBuffer);
   screens.setLoadingProgress(0.9);
   level = generateLevel(analysis, trackMeta);
+  lastAutoLevel = level; // versão original da análise (base do "Refazer auto" no editor)
+
+  // Editor de mapas: aplica o mapa compartilhado (se for dessa música) ou o salvo no aparelho.
+  let mapNotice = null;
+  const key = trackKey(trackMeta);
+  const faixaMatches = pendingSharedMap &&
+    (!pendingSharedMap.faixa ||
+      String(trackMeta.title || '').toLowerCase().includes(pendingSharedMap.faixa.toLowerCase().slice(0, 12)));
+  if (pendingSharedMap && faixaMatches) {
+    level = applyMapToLevel({ ...level }, pendingSharedMap.data);
+    mapNotice = '🔗 MAPA COMPARTILHADO!';
+    pendingSharedMap = null;
+  } else {
+    const savedMap = loadMapFor(key);
+    if (savedMap) {
+      level = applyMapToLevel({ ...level }, savedMap);
+      mapNotice = '💾 SEU MAPA!';
+    }
+  }
   screens.setLoadingProgress(1);
 
   startGame(audioBuffer, level);
+  if (mapNotice) milestoneState = { text: mapNotice, alpha: 1.6 };
 }
 
 // ---------- Jogo ----------
@@ -273,6 +318,7 @@ function startGame(audioBuffer, lvl) {
 
   // Estado por partida: badge da música, replay da morte, turma, recordes e fantasma.
   lastGameBuffers = { audioBuffer, lvl };
+  app.querySelector('#editor-btn')?.classList.remove('hidden'); // 🛠️ liberado após carregar uma música
   deathCam = null;
   latestProgressPct = 0;
   turmaRunRecorded = false;
@@ -930,6 +976,88 @@ installBtn?.addEventListener('click', async () => {
 window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
   installBtn?.classList.add('hidden');
+});
+
+// ---------- Editor de mapas ----------
+
+function editorFlash(headline) {
+  screens.showOverlay(`
+    <div class="overlay-card">
+      <h2>${headline}</h2>
+      <div class="overlay-actions"><button id="btn-flash-ok">OK</button></div>
+    </div>`);
+  app.querySelector('#btn-flash-ok')?.addEventListener('click', () => screens.hideOverlay());
+}
+
+function openMapEditor() {
+  if (!lastGameBuffers || !currentTrackMeta) return;
+  if (!editorCtl) {
+    editorCtl = new MapEditor(app.querySelector('#screen-editor'), {
+      onClose: () => screens.show('home'),
+      onTest: (data) => {
+        // Testa com a mesma música; as cores 'auto' sempre partem da análise original.
+        const base = lastAutoLevel
+          ? { ...lastGameBuffers.lvl, sections: lastAutoLevel.sections }
+          : lastGameBuffers.lvl;
+        startGame(lastGameBuffers.audioBuffer, applyMapToLevel(base, data));
+      },
+      onSave: (data) => {
+        saveMapFor(trackKey(currentTrackMeta), data);
+        editorFlash('💾 Mapa salvo!');
+      },
+      onShare: async (data) => {
+        const enc = encodeMap(data);
+        const faixa = encodeURIComponent(currentTrackMeta.title || '');
+        const url = `${location.origin}${location.pathname}?mapa=${enc}&faixa=${faixa}`;
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(url);
+          copied = true;
+        } catch {
+          /* clipboard indisponível — mostra o link para copiar na mão */
+        }
+        screens.showOverlay(`
+          <div class="overlay-card">
+            <h2>🔗 Link do seu mapa</h2>
+            <p>${copied ? 'Copiado! Quem abrir com a mesma música recebe seu mapa 🤝' : 'Copie manualmente:'}</p>
+            <p class="share-url"></p>
+            <div class="overlay-actions"><button id="btn-share-ok">OK</button></div>
+          </div>`);
+        app.querySelector('.share-url').textContent = url;
+        app.querySelector('#btn-share-ok')?.addEventListener('click', () => screens.hideOverlay());
+      },
+      onResetAuto: () => {
+        if (!lastAutoLevel) return;
+        editorCtl.setMap({ ...mapFromLevel(lastAutoLevel), theme: 'auto' });
+        deleteMapFor(trackKey(currentTrackMeta));
+        editorFlash('↺ Mapa automático restaurado');
+      },
+    });
+  }
+  const baseLvl = lastGameBuffers.lvl;
+  screens.show('editor');
+  editorCtl.open(
+    {
+      bpm: baseLvl.bpm,
+      durationSec: baseLvl.durationSec,
+      beats: baseLvl.beats,
+      sections: baseLvl.sections,
+      physics: baseLvl.physics,
+    },
+    { ...mapFromLevel(baseLvl), theme: loadMapFor(trackKey(currentTrackMeta))?.theme || 'auto' },
+    currentTrackMeta.title
+  );
+}
+
+app.querySelector('#editor-btn')?.addEventListener('click', openMapEditor);
+
+// Recalcula o canvas do editor ao girar/redimensionar a tela.
+window.addEventListener('resize', () => {
+  const editorEl = app.querySelector('#screen-editor');
+  if (editorCtl && editorEl && !editorEl.classList.contains('hidden')) {
+    editorCtl.resize();
+    editorCtl.render();
+  }
 });
 
 // ---------- PWA ----------

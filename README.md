@@ -228,6 +228,13 @@ licenciada |
   guardado por 180 ms e pula no instante da aterrissagem (julgado nesse momento);
   e **todo toque no chão pula** (estilo Geometry Dash) — fora da janela musical só
   não pontua/julga. Fim do "cliquei e não pulou".
+- **Editor de mapas** 🛠️ (`src/ui/editor.js` + `src/game/mapstore.js`): linha do
+  tempo da música com as seções coloridas; toque adiciona espinho/bloco/pad/orb/
+  escudo/moeda (encaixe na meia-batida), toque no item apaga, arrastar rola.
+  Botões **Testar** (joga na hora com a mesma música), **Salvar** (vale sempre
+  para aquela música, no aparelho) e **Link** (compartilha o mapa via URL —
+  `?mapa=…` base64). **Temas visuais** por música (Neon, Pôr-do-sol, Oceano,
+  Vulcão, Matrix) recolorem cenário e obstáculos, tudo procedural em Canvas.
 
 ## 🚀 Próximos passos sugeridos
 

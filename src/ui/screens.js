@@ -8,6 +8,7 @@ export class Screens {
       home: root.querySelector('#screen-home'),
       loading: root.querySelector('#screen-loading'),
       game: root.querySelector('#screen-game'),
+      editor: root.querySelector('#screen-editor'),
       overlay: root.querySelector('#overlay'),
     };
   }
