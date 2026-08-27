@@ -22,6 +22,8 @@
       <header class="hero">
         <div class="hero-stage" aria-hidden="true">
           <div class="hero-glow"></div>
+          <div class="hero-note n1">♪</div>
+          <div class="hero-note n2">♫</div>
           <div class="hero-float">
             <div class="hero-cube">
               <i class="face f1"></i><i class="face f2"></i><i class="face f3"></i>
@@ -29,26 +31,34 @@
             </div>
           </div>
           <div class="hero-shadow"></div>
+          <div class="hero-eq"><i></i><i></i><i></i><i></i><i></i></div>
         </div>
-        <h1>Rhythm Dash</h1>
-        <p>Escolha uma música — o jogo gera o mapa a partir do áudio, no seu aparelho.</p>
+        <h1>Rhythm <span class="accent">Dash</span></h1>
+        <p class="hero-sub">Escolha uma música — o jogo gera o mapa a partir do áudio, no seu aparelho.</p>
+        <div class="hero-chips">
+          <span class="chip">🎵 A música vira o mapa</span>
+          <span class="chip">📱 Roda offline</span>
+          <span class="chip">👻 Fantasma da melhor corrida</span>
+        </div>
       </header>
 
-      <div class="search-box">
-        <input id="search-input" type="text" placeholder="Buscar música, colar link (Spotify/YouTube/MP3)…" />
-        <button id="search-btn">Buscar</button>
-      </div>
+      <div class="panel home-actions">
+        <div class="search-box">
+          <input id="search-input" type="text" placeholder="Buscar música, colar link (Spotify/YouTube/MP3)…" />
+          <button id="search-btn" class="btn-primary">Buscar</button>
+        </div>
 
-      <div class="quick-actions">
-        <label class="file-btn">
-          📂 Arquivo do aparelho
-          <input id="file-input" type="file" accept="audio/*" hidden />
-        </label>
-        <button id="demo-btn" class="secondary">🎮 Música do jogo (demo 128 BPM)</button>
-        <button id="install-btn" class="secondary hidden">📲 Instalar app</button>
-      </div>
+        <div class="quick-actions">
+          <label class="file-btn">
+            📂 Arquivo do aparelho
+            <input id="file-input" type="file" accept="audio/*" hidden />
+          </label>
+          <button id="demo-btn" class="secondary">🎮 Demo 128 BPM</button>
+          <button id="install-btn" class="secondary hidden">📲 Instalar app</button>
+        </div>
 
-      <div id="home-records" class="records hidden"></div>
+        <div id="home-records" class="records hidden"></div>
+      </div>
 
       <div id="search-results" class="results"></div>
 
@@ -99,6 +109,8 @@
           <p id="turma-status" class="hint"></p>
         </div>
       </details>
+
+      <footer class="home-footer">Rhythm Dash · código aberto no GitHub · feito com ♥ e batidas</footer>
     </section>
 
     <section id="screen-loading" class="screen hidden">
