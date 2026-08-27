@@ -19,15 +19,46 @@ test('tap no modo batida, exatamente na batida, gera PERFEITO', () => {
   assert.equal(engine.player.jumpStart, beat.time);
 });
 
-test('tap fora da tolerância não pula nem julga', () => {
+test('tap fora da janela musical PULA mas não julga nem pontua', () => {
   const level = levelWithDrop();
   let judged = null;
   const engine = new GameEngine(level, { onJudge: (j) => { judged = j; } }, MODE.BEAT);
   const beat = engine.level.beats[2];
   const { T } = physicsForBpm(level.bpm);
   engine.tap(beat.time + T * 0.5); // bem fora da janela de ~0.3 batida
+  // Responsividade à la Geometry Dash: todo toque no chão pula...
+  assert.equal(engine.player.jumping, true);
+  // ...mas fora do ritmo não entra no combo nem pontua.
   assert.equal(judged, null);
-  assert.equal(engine.player.jumping, false);
+  assert.equal(engine.combo, 0);
+  assert.equal(engine.score, 0);
+});
+
+test('input buffering: toque no ar executa assim que aterrissa', () => {
+  const level = levelWithDrop();
+  const engine = new GameEngine(level, {}, MODE.BEAT);
+  const beat = engine.level.beats[0];
+  const { T } = physicsForBpm(level.bpm);
+  engine.tap(beat.time); // primeiro pulo — arco de 1 batida
+  engine.tap(beat.time + T * 0.8); // ainda no ar → fica no buffer
+  assert.equal(engine.combo, 1); // nada aconteceu ainda
+  engine.updatePlayer(beat.time + T * 1.01, 0.016); // aterrissa
+  engine.consumeTapBuffer(beat.time + T * 1.01);
+  assert.equal(engine.player.jumping, true); // pulo acontece ao pousar
+  assert.equal(engine.combo, 2); // julgado no tempo da aterrissagem (≈ próxima batida)
+});
+
+test('input buffering expira: toque cedo demais não executa ao pousar', () => {
+  const level = levelWithDrop();
+  const engine = new GameEngine(level, {}, MODE.BEAT);
+  const beat = engine.level.beats[0];
+  const { T } = physicsForBpm(level.bpm);
+  engine.tap(beat.time);
+  engine.tap(beat.time + T * 0.2); // no ar, MUITO cedo (>180ms antes de pousar)
+  engine.updatePlayer(beat.time + T * 1.02, 0.016);
+  engine.consumeTapBuffer(beat.time + T * 1.02);
+  assert.equal(engine.player.jumping, false); // expirou — não pula
+  assert.equal(engine.combo, 1);
 });
 
 test('tap dentro da janela GOOD mas fora do PERFECT gera BOM', () => {

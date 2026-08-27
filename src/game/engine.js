@@ -74,6 +74,7 @@ export function multiplierForCombo(combo) {
 
 const TRAIL_WINDOW_SEC = 0.3; // rastro: janela de posições recentes do jogador
 const TRAIL_MAX_POINTS = 24;
+const TAP_BUFFER_SEC = 0.18; // input buffering: toque dado no ar vale se pousar logo
 
 /**
  * @typedef {Object} EngineCallbacks
@@ -129,6 +130,7 @@ export class GameEngine {
     this.trail = []; // posições recentes {y, t} para o rastro neon
     this.finished = false;
     this.lastKiller = null; // obstáculo que matou (para o "replay da morte" no renderer)
+    this.tapBufferAt = null; // toque dado no ar (input buffering) — executa ao pousar
   }
 
   /** Soma pontos já aplicando o multiplicador do combo atual. */
@@ -179,6 +181,7 @@ export class GameEngine {
   /** Chamado quando o jogador toca a tela. */
   tap(currentTime) {
     if (this.player.dead || this.finished) return;
+    const judgedTime = currentTime - (this.audioOffsetSec || 0);
 
     if (this.mode === MODE.FREE) {
       if (!this.player.jumping) {
@@ -187,39 +190,71 @@ export class GameEngine {
         this.player.jumpOffset = 0;
         this.player.vy = this.freeGravity.v;
         this.callbacks.onTapVisual?.();
+      } else {
+        this.tapBufferAt = currentTime; // buffer no ar também vale no modo livre
       }
       return;
     }
 
-    // Modo Batida: só aceita toque se não estiver no ar.
-    if (this.player.jumping) return;
+    // Modo Batida, toque no ar: NÃO ignora — guarda por TAP_BUFFER_SEC e pula
+    // assim que aterrissar (input buffering, o "clique responde quando eu clico").
+    if (this.player.jumping) {
+      this.tapBufferAt = currentTime;
+      return;
+    }
 
     // Compensação de latência do áudio (calibrada no aparelho): o jogador toca
     // no que OUVIU, que chega offset segundos depois — julga pelo tempo corrigido.
-    const judgedTime = currentTime - (this.audioOffsetSec || 0);
     const beat = this.nearestBeat(judgedTime);
     const deltaMs = (judgedTime - beat.time) * 1000;
     const absMs = Math.abs(deltaMs);
     const beatDurationMs = this.physics.T * 1000;
     const windows = judgeWindowsForBeat(beatDurationMs); // tolerância musical
+    const p = this.player;
 
     if (absMs > windows.missMs) {
-      // Toque fora de janela: não pula (evita "spam"), mas não pune combo diretamente.
+      // Todo toque no chão pula (responsividade à la Geometry Dash): o arco sai
+      // imediatamente, mas fora da janela musical não julga nem pontua —
+      // só o ritmo certo conta para combo/score.
+      p.jumping = true;
+      p.jumpStart = currentTime;
+      p.jumpOffset = 0;
+      p.vy = this.physics.v;
+      this.callbacks.onTapVisual?.();
       return;
     }
 
     let judge = 'GOOD';
     if (absMs <= windows.perfectMs) judge = 'PERFECT';
 
-    this.player.jumping = true;
-    this.player.jumpStart = beat.time; // snap: o arco sempre começa exatamente na batida
-    this.player.jumpOffset = 0;
-    this.player.vy = this.physics.v;
-    this.player.landedBeatIndex = beat.index;
+    p.jumping = true;
+    p.jumpStart = beat.time; // snap: o arco sempre começa exatamente na batida
+    p.jumpOffset = 0;
+    p.vy = this.physics.v;
+    p.landedBeatIndex = beat.index;
 
     // Combo + pontuação (com multiplicador) passam pelo registro central de hits.
     this.registerHit(judge === 'PERFECT' ? SCORE.PERFECT : SCORE.GOOD, judge);
     this.callbacks.onJudge?.(judge, this.combo);
+  }
+
+  /**
+   * Consome o toque guardado no ar: se o jogador já pousou e o buffer está
+   * fresco (≤ TAP_BUFFER_SEC), pula agora (julgado no momento da aterrissagem,
+   * que no modo batida cai bem em cima da batida); se passou da validade, expira.
+   */
+  consumeTapBuffer(currentTime) {
+    if (this.tapBufferAt == null || this.player.dead || this.finished) return;
+    if (!this.player.jumping) {
+      if (currentTime - this.tapBufferAt <= TAP_BUFFER_SEC) {
+        this.tapBufferAt = null;
+        this.tap(currentTime);
+      } else {
+        this.tapBufferAt = null; // toque foi cedo demais — expira sem pulo
+      }
+    } else if (currentTime - this.tapBufferAt > TAP_BUFFER_SEC) {
+      this.tapBufferAt = null; // continua no ar e o buffer já venceu
+    }
   }
 
   /** Atualiza física do jogador (altura do pulo) para o tempo atual. */
@@ -410,6 +445,7 @@ export class GameEngine {
       return;
     }
     this.updatePlayer(currentTime, dt);
+    this.consumeTapBuffer(currentTime); // toque dado no ar dispara ao aterrissar
     this.checkSectionChange(currentTime);
     if (!this.player.dead) {
       this.checkCollisions(currentTime, canvasWidthCells);

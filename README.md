@@ -224,6 +224,10 @@ licenciada |
   amostrados a 20 Hz (salva quando você bate seu próprio recorde de progresso).
 - **Botão "Instalar app"** 📲: aparece na home quando o navegador oferece a instalação
   do PWA (`beforeinstallprompt`) — sem precisar caçar no menu do navegador.
+- **Resposta de toque reformulada** 👆: *input buffering* — toque dado no ar fica
+  guardado por 180 ms e pula no instante da aterrissagem (julgado nesse momento);
+  e **todo toque no chão pula** (estilo Geometry Dash) — fora da janela musical só
+  não pontua/julga. Fim do "cliquei e não pulou".
 
 ## 🚀 Próximos passos sugeridos
 
