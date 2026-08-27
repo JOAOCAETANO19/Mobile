@@ -128,6 +128,7 @@ export class GameEngine {
     this.shieldActive = false; // escudo absorve uma colisão fatal e depois desaparece
     this.trail = []; // posições recentes {y, t} para o rastro neon
     this.finished = false;
+    this.lastKiller = null; // obstáculo que matou (para o "replay da morte" no renderer)
   }
 
   /** Soma pontos já aplicando o multiplicador do combo atual. */
@@ -339,7 +340,7 @@ export class GameEngine {
             this.shieldActive = false;
             this.callbacks.onShieldBreak?.(ob);
           } else {
-            this.die(currentTime);
+            this.die(currentTime, ob);
             return;
           }
         } else if (dx < hitboxHalfWidth * 1.8 && !this.lastNearMissCheck.has(ob.id)) {
@@ -366,9 +367,10 @@ export class GameEngine {
     }
   }
 
-  die(currentTime) {
+  die(currentTime, killer = null) {
     this.player.dead = true;
     this.combo = 0;
+    this.lastKiller = killer; // usado pelo front para destacar o obstáculo fatal
     const checkpoint = this.findCheckpointTime(currentTime);
     this.callbacks.onDeath?.(checkpoint);
   }

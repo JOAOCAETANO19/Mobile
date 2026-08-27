@@ -308,6 +308,83 @@ html, body {
 }
 .pause-btn:hover { transform: scale(1.06); background: rgba(138, 92, 255, 0.35); }
 
+/* ---------- Badge da música (título/artista durante o jogo) ---------- */
+
+#screen-game { position: relative; }
+.song-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  max-width: min(46vw, 340px);
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(12, 8, 28, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.song-badge.hidden { display: none; }
+
+/* ---------- Modo Turma (home + pódio) ---------- */
+
+.turma-list {
+  list-style: none;
+  margin: 4px 0 10px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.turma-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 13px;
+}
+.turma-list li.current { border-color: var(--accent-2); box-shadow: 0 0 10px rgba(77, 255, 234, 0.35); }
+.turma-list button {
+  border: 0;
+  background: none;
+  color: var(--pink);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.turma-podium {
+  list-style: none;
+  margin: 6px 0 12px;
+  padding: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.turma-podium li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 14px;
+}
+.turma-podium .turma-medal { font-size: 18px; }
+.turma-podium .turma-name { font-weight: 600; flex: 1; }
+.turma-podium .turma-stats { opacity: 0.75; font-size: 12px; }
+.turma-name { color: var(--gold); }
+.turma-pos { opacity: 0.7; font-size: 13px; }
+
 /* ---------- Overlays (pausa / morte / vitória) ---------- */
 
 .overlay {

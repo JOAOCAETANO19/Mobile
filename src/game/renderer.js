@@ -436,6 +436,36 @@ export class Renderer {
    * Cubo do jogador: gradiente diagonal, rosto simples (olhos; "X" ao morrer),
    * rastro neon de posições recentes e halo verde giratório com escudo ativo.
    */
+  /**
+   * "Replay da morte": anel pulsante vermelho + ☠ sobre o obstáculo que matou,
+   * exibido por ~1s enquanto a cena fica congelada (antes do overlay de morte).
+   */
+  drawDeathMarker(screenXCells, pulseTime = 0) {
+    const { ctx } = this;
+    const x = this.worldToScreenX(screenXCells);
+    const gy = this.groundY();
+    const s = this.cellPx * 0.8;
+    const wave = 0.5 + 0.5 * Math.sin(pulseTime * 12); // pulsação rápida
+
+    ctx.save();
+    ctx.strokeStyle = `rgba(255, 61, 110, ${0.55 + 0.45 * wave})`;
+    ctx.lineWidth = 4;
+    ctx.shadowColor = '#ff3d6e';
+    ctx.shadowBlur = 14 + 14 * wave;
+    ctx.beginPath();
+    ctx.arc(x, gy - s * 0.55, s * (0.95 + 0.2 * wave), 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.font = `700 ${Math.round(s * 0.75)}px Poppins, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffd166';
+    ctx.shadowColor = '#ffd166';
+    ctx.shadowBlur = 12;
+    ctx.fillText('☠', x, gy - s * (1.75 + 0.1 * wave));
+    ctx.restore();
+  }
+
   drawPlayer(player, beatRingProgress, opts = {}) {
     const { ctx } = this;
     const { trail = [], shieldActive = false, time = 0 } = opts;

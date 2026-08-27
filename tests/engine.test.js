@@ -63,6 +63,19 @@ test('colisão com espinho mata o jogador quando ele está no chão', () => {
   assert.equal(engine.player.dead, true);
 });
 
+test('a morte registra o obstáculo assassino em lastKiller (replay da morte)', () => {
+  const level = levelWithDrop();
+  const engine = new GameEngine(level, {}, MODE.BEAT);
+  const ob = engine.level.obstacles[0];
+  engine.checkCollisions(ob.time, 20);
+  assert.equal(engine.player.dead, true);
+  assert.ok(engine.lastKiller, 'lastKiller deveria estar preenchido');
+  assert.equal(engine.lastKiller.id, ob.id);
+  // reset limpa o assassino para a próxima tentativa
+  engine.reset(0);
+  assert.equal(engine.lastKiller, null);
+});
+
 test('combo incrementa a cada julgamento e reseta na morte', () => {
   const level = levelWithDrop();
   const engine = new GameEngine(level, {}, MODE.BEAT);

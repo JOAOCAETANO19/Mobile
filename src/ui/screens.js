@@ -133,6 +133,46 @@ export class Screens {
       </div>
     `;
   }
+
+  /** Modo Turma: tela "passe o celular" entre um jogador e o próximo. */
+  turmaHandoffHtml({ name, position, total }) {
+    return `
+      <div class="overlay-card">
+        <h2>📲 Passe o celular!</h2>
+        <p>Vez de <strong class="turma-name">${escapeHtml(name)}</strong>
+          <span class="turma-pos">(jogador ${position}/${total})</span></p>
+        <div class="overlay-actions">
+          <button id="btn-turma-play">▶ Começar a vez de ${escapeHtml(name)}</button>
+          <button id="btn-turma-end" class="secondary">Encerrar turma</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /** Modo Turma: pódio final com o ranking da rodada. */
+  turmaPodiumHtml(rowsHtml) {
+    return `
+      <div class="overlay-card">
+        <h2>🏫 Placar da Turma</h2>
+        <ol class="turma-podium">${rowsHtml}</ol>
+        <div class="overlay-actions">
+          <button id="btn-turma-rematch">🔁 Revanche (mesma turma)</button>
+          <button id="btn-turma-done" class="secondary">Voltar ao menu</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /** Uma linha do pódio da turma (medalha + nome + números). */
+  turmaPodiumRowHtml({ medal, name, score, bestCombo, progressPct, finished }) {
+    return `
+      <li>
+        <span class="turma-medal">${medal}</span>
+        <span class="turma-name">${escapeHtml(name)}</span>
+        <span class="turma-stats">${finished ? '🏁 ' : ''}${Math.round(progressPct)}% · ${score} pts · ${bestCombo}x</span>
+      </li>
+    `;
+  }
 }
 
 function escapeHtml(str) {

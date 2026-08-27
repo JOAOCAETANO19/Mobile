@@ -205,6 +205,15 @@ licenciada |
   `screen.orientation.lock('landscape')` ao iniciar o jogo (com tela cheia no Android)
   e overlay **"Gire o celular"** quando um aparelho touch está em pé — fallback para
   navegadores sem suporte ao lock (ex.: Safari do iOS).
+- **Badge da música** 🎵: título e artista aparecem numa pílula no canto durante o jogo.
+- **Replay da morte** ☠: por ~1s a cena congela e um anel pulsante marca exatamente
+  o obstáculo que te derrubou (`engine.lastKiller` + `drawDeathMarker`), antes do overlay.
+- **Modo Turma** 🏫 (`src/game/turma.js`): placar local no mesmo celular — cada jogador
+  toca a mesma música, um de cada vez, com telinha "passe o celular" entre as vezes e
+  pódio final com 🥇🥈🥉 (ranking por % de progresso, desempate por score e combo).
+  Estado salvo no aparelho; suporta revanche com a mesma turma.
+- **Pausa automática** ao trocar de aba/aplicativo (`visibilitychange`) — sem dessincronia
+  entre a música e o jogo ao voltar.
 
 ## 🚀 Próximos passos sugeridos
 

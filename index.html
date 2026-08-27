@@ -72,6 +72,25 @@
           <p id="backend-status" class="hint"></p>
         </div>
       </details>
+
+      <details class="settings" id="turma-section">
+        <summary>🏫 Modo Turma (placar no mesmo celular)</summary>
+        <div class="settings-body">
+          <p class="hint">
+            Cada jogador toca a mesma música, um de cada vez — no final, o ranking com pódio. 👑
+          </p>
+          <div class="backend-row">
+            <input id="turma-name" type="text" placeholder="Nome do jogador" maxlength="16" />
+            <button id="turma-add">Adicionar</button>
+          </div>
+          <ul id="turma-list" class="turma-list"></ul>
+          <div class="backend-row">
+            <button id="turma-toggle">▶ Ativar modo turma</button>
+            <button id="turma-clear" class="secondary">Limpar turma</button>
+          </div>
+          <p id="turma-status" class="hint"></p>
+        </div>
+      </details>
     </section>
 
     <section id="screen-loading" class="screen hidden">
@@ -84,6 +103,7 @@
 
     <section id="screen-game" class="screen hidden">
       <canvas id="game-canvas"></canvas>
+      <div id="song-badge" class="song-badge hidden"></div>
       <button id="pause-btn" class="pause-btn" aria-label="Pausar">⏸</button>
     </section>
 
