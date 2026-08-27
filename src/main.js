@@ -18,6 +18,7 @@ import { Countdown } from './game/countdown.js';
 import { Renderer } from './game/renderer.js';
 import { sfx, vibrate } from './game/fx.js';
 import { createDemoTrackBuffer, DEMO_TRACK_META } from './demo/demotrack.js';
+import { initRotateOverlay, lockLandscape, unlockLandscape } from './core/orientation.js';
 
 const app = document.querySelector('#app');
 const screens = new Screens(app);
@@ -230,6 +231,9 @@ async function runAnalysisAndStart(audioBuffer, trackMeta) {
 
 function startGame(audioBuffer, lvl) {
   screens.show('game');
+  // Modo paisagem: tenta travar a orientação (fire-and-forget; o overlay
+  // "Gire o celular" cobre os navegadores sem suporte ao lock, ex.: iOS).
+  lockLandscape();
   const canvas = app.querySelector('#game-canvas');
   renderer = new Renderer(canvas);
   player = new SyncedPlayer(audioBuffer);
@@ -411,6 +415,7 @@ function quitToMenu() {
   cancelAnimationFrame(rafId);
   loopRunning = false;
   player?.stop();
+  unlockLandscape();
   screens.hideOverlay();
   screens.show('home');
 }
@@ -488,5 +493,8 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
 }
+
+// Overlay "Gire o celular": cobre a tela em aparelho touch em pé (retrato).
+initRotateOverlay(app.querySelector('#rotate-overlay'));
 
 screens.show('home');

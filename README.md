@@ -201,6 +201,10 @@ licenciada |
   "air-jump" teleportava o cubo para o chão).
 - **Padrões rítmicos no levelgen** (`RHYTHM_PATTERNS`): *double*, *bloco+espinho* e
   *[pad, espinho]*, posicionados com a regra "sem beat ocupado duas vezes".
+- **Modo paisagem no celular** (`src/core/orientation.js`): manifest em `landscape`,
+  `screen.orientation.lock('landscape')` ao iniciar o jogo (com tela cheia no Android)
+  e overlay **"Gire o celular"** quando um aparelho touch está em pé — fallback para
+  navegadores sem suporte ao lock (ex.: Safari do iOS).
 
 ## 🚀 Próximos passos sugeridos
 
