@@ -20,6 +20,9 @@ import { sfx, vibrate } from './game/fx.js';
 import { createDemoTrackBuffer, DEMO_TRACK_META } from './demo/demotrack.js';
 import { initRotateOverlay, lockLandscape, unlockLandscape } from './core/orientation.js';
 import { emptyTurma, normalizePlayerName, restartRound, sortTurmaResults, medalFor } from './game/turma.js';
+import { getAudioOffsetMs, setAudioOffsetMs, averageOffset, matchTapsToTicks } from './core/latency.js';
+import { trackKey, loadStats, saveStats, applyRunToStats, topPlayed } from './game/stats.js';
+import { sampleGhost, ghostYAt, saveGhostFor, loadGhostFor } from './game/ghost.js';
 
 const app = document.querySelector('#app');
 const screens = new Screens(app);
@@ -46,6 +49,11 @@ let lastGameBuffers = null; // {audioBuffer, level} — "jogar a mesma música" 
 let deathCam = null; // {killerId, t, elapsed, checkpoint} — congela e marca o assassino
 let latestProgressPct = 0; // maior progresso da tentativa (para o placar da turma)
 let turmaRunRecorded = false; // evita registrar a mesma tentativa duas vezes
+let runStatsSaved = false; // garante 1 registro de recorde por partida
+let ghostRec = []; // amostras [t, y] da corrida atual (para o fantasma)
+let ghostBest = null; // fantasma carregado da melhor corrida DESTA música
+let deferredInstallPrompt = null; // evento beforeinstallprompt guardado
+let calibration = null; // calibração de latência em andamento
 
 /** Estado da turma salvo no aparelho (sobrevive a refresh). */
 function loadTurma() {
@@ -263,11 +271,14 @@ function startGame(audioBuffer, lvl) {
   // "Gire o celular" cobre os navegadores sem suporte ao lock, ex.: iOS).
   lockLandscape();
 
-  // Estado por partida: badge da música, replay da morte e placar da turma.
+  // Estado por partida: badge da música, replay da morte, turma, recordes e fantasma.
   lastGameBuffers = { audioBuffer, lvl };
   deathCam = null;
   latestProgressPct = 0;
   turmaRunRecorded = false;
+  runStatsSaved = false;
+  ghostRec = [];
+  ghostBest = currentTrackMeta ? loadGhostFor(trackKey(currentTrackMeta)) : null;
   const badge = app.querySelector('#song-badge');
   if (badge && currentTrackMeta) {
     const title = currentTrackMeta.title || 'Música';
@@ -337,16 +348,25 @@ function startGame(audioBuffer, lvl) {
       engine.particles.spawn(renderer.widthCss * 0.3, p.y - renderer.cellPx, 20, { speed: 220, life: 0.8, color: '#4dffea', size: 4 });
       engine.particles.spawn(renderer.widthCss * 0.6, p.y - renderer.cellPx * 1.4, 20, { speed: 220, life: 0.8, color: '#ffd166', size: 4 });
       engine.particles.spawn(renderer.widthCss * 0.8, p.y - renderer.cellPx, 20, { speed: 220, life: 0.8, color: '#ff5d8f', size: 4 });
+      const recs = finalizeRun(true); // recordes locais + salva fantasma se foi a melhor
       if (turma.active) {
         // Modo Turma: registra 100% para o jogador da vez e já chama o próximo (ou o pódio).
         recordTurmaResult(100, true);
         showTurmaAfterRun();
       } else {
-        screens.showOverlay(screens.finishOverlayHtml({ score: engine.score, bestCombo: engine.bestCombo }));
+        screens.showOverlay(screens.finishOverlayHtml({
+          score: engine.score,
+          bestCombo: engine.bestCombo,
+          record: !!(recs && (recs.score || recs.combo || recs.progress)),
+        }));
         wireFinishOverlay();
       }
     },
   }, currentMode);
+
+  // Compensação de latência do áudio (calibrada nas configurações): os julgamentos
+  // PERFEITO/BOM passam a comparar o toque com o que o jogador realmente ouviu.
+  engine.audioOffsetSec = getAudioOffsetMs() / 1000;
 
   window.addEventListener('resize', () => renderer?.resize());
   canvas.addEventListener('pointerdown', onTap);
@@ -468,6 +488,8 @@ function quitToMenu() {
     !countdownActive &&
     recordTurmaResult(Math.round(latestProgressPct), false);
 
+  finalizeRun(false); // recordes locais (melhor progresso conta mesmo sem terminar)
+
   countdownActive = false;
   countdown = null;
   deathCam = null;
@@ -505,6 +527,11 @@ function loop() {
   const currentTime = player.getCurrentTime();
   engine.update(currentTime, dt, renderer.widthCells);
   renderer.updateShake(dt);
+
+  // Grava amostras da corrida para o futuro "fantasma" da melhor tentativa.
+  if (!engine.player.dead && !engine.finished) {
+    sampleGhost(ghostRec, currentTime, engine.player.y);
+  }
 
   renderFrame(currentTime);
 
@@ -552,6 +579,11 @@ function renderFrame(currentTime) {
   }
   for (const ob of engine.getVisibleObstacles(currentTime, renderer.widthCells)) {
     renderer.drawObstacle(ob, currentTime, beatProgress);
+  }
+  // Fantasma da melhor tentativa correndo junto (mesma música, dado local).
+  if (ghostBest) {
+    const ghostY = ghostYAt(ghostBest, currentTime);
+    if (ghostY != null) renderer.drawGhost(ghostY);
   }
   renderer.drawPlayer(engine.player, engine.mode === MODE.BEAT ? beatProgress : null, {
     trail: engine.trail,
@@ -739,6 +771,167 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
+// ---------- Recordes locais + fantasma ----------
+
+/**
+ * Registra o resultado da partida nos recordes locais da música (1x por partida).
+ * Se foi a melhor corrida em progresso, salva também o "fantasma" (trajetória).
+ * Retorna as flags de recorde (para destacar no overlay de vitória).
+ */
+function finalizeRun(finished) {
+  if (runStatsSaved || !currentTrackMeta || !engine) return null;
+  runStatsSaved = true;
+  const key = trackKey(currentTrackMeta);
+  const progress = finished ? 100 : Math.round(latestProgressPct);
+  const { stats, records } = applyRunToStats(loadStats(), key, {
+    score: engine.score,
+    bestCombo: engine.bestCombo,
+    progressPct: progress,
+    finished,
+  });
+  saveStats(stats);
+  if (records.progress && progress >= 5 && ghostRec.length > 4) {
+    saveGhostFor(key, ghostRec);
+  }
+  renderRecords();
+  return records;
+}
+
+/** Seção "🏆 Seus recordes" na home (as 5 músicas mais recentes). */
+function renderRecords() {
+  const el = app.querySelector('#home-records');
+  if (!el) return;
+  const top = topPlayed(loadStats(), 5);
+  if (!top.length) {
+    el.classList.add('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
+  el.innerHTML = '<h3>🏆 Seus recordes</h3>';
+  const ul = document.createElement('ul');
+  for (const [key, s] of top) {
+    const [title, artist] = key.split('•');
+    const li = document.createElement('li');
+    const track = document.createElement('span');
+    track.className = 'rec-track';
+    track.textContent = `🎵 ${title}${artist ? ' — ' + artist : ''}`;
+    const st = document.createElement('span');
+    st.className = 'rec-stats';
+    st.textContent = `${s.bestProgressPct}% · ${s.bestScore} pts · ${s.bestCombo}x${s.finishes ? ' · 🏁' : ''}`;
+    li.append(track, st);
+    ul.appendChild(li);
+  }
+  el.appendChild(ul);
+}
+
+// ---------- Calibração de latência ----------
+
+const latencyValueEl = app.querySelector('#latency-value');
+function refreshLatencyLabel() {
+  if (latencyValueEl) latencyValueEl.textContent = `${getAudioOffsetMs()} ms`;
+}
+
+function startLatencyCalibration() {
+  if (calibration) return;
+  const ctx = getAudioContext();
+  ctx.resume?.();
+
+  const N = 8;
+  const interval = 0.6; // 100 BPM
+  const startAt = ctx.currentTime + 0.8;
+  const tickTimes = [];
+  const tapTimes = [];
+
+  // Agenda os bipes (o 1º mais agudo, como referência de "começou").
+  const master = ctx.createGain();
+  master.gain.value = 0.25;
+  master.connect(ctx.destination);
+  for (let i = 0; i < N; i++) {
+    const t = startAt + i * interval;
+    tickTimes.push(t);
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.frequency.value = i === 0 ? 1400 : 1000;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.8, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    osc.connect(g);
+    g.connect(master);
+    osc.start(t);
+    osc.stop(t + 0.1);
+  }
+
+  screens.showOverlay(`
+    <div class="overlay-card calibration">
+      <h2>🎧 Calibrar latência</h2>
+      <p>Toque em qualquer lugar NO RITMO dos ${N} bipes…</p>
+      <div class="cal-count"><span id="cal-count">0</span>/${N}</div>
+      <button id="btn-cal-cancel" class="secondary">Cancelar</button>
+    </div>`);
+
+  const overlayEl = app.querySelector('#overlay');
+  const onTap = () => {
+    if (!calibration) return;
+    const tNow = ctx.currentTime;
+    if (tNow < startAt - 0.45 || tNow > startAt + (N - 1) * interval + 0.4) return;
+    tapTimes.push(tNow);
+    const c = app.querySelector('#cal-count');
+    if (c) c.textContent = String(tapTimes.length);
+    sfx.jump(); // feedback imediato do toque registrado
+  };
+  overlayEl.addEventListener('pointerdown', onTap);
+
+  const msUntilFinish = (startAt + (N - 1) * interval + 0.6 - ctx.currentTime) * 1000;
+  const finishTimer = setTimeout(finish, msUntilFinish);
+
+  function cleanup() {
+    calibration = null;
+    clearTimeout(finishTimer);
+    overlayEl.removeEventListener('pointerdown', onTap);
+    try { master.disconnect(); } catch { /* noop */ }
+  }
+  function finish() {
+    const offsets = matchTapsToTicks(tapTimes, tickTimes);
+    const avg = averageOffset(offsets);
+    const saved = offsets.length ? setAudioOffsetMs(avg) : getAudioOffsetMs();
+    cleanup();
+    screens.showOverlay(screens.calibrateResultHtml({ offsetMs: saved, used: offsets.length, total: N }));
+    app.querySelector('#btn-cal-close')?.addEventListener('click', () => screens.hideOverlay());
+    refreshLatencyLabel();
+  }
+  calibration = {
+    cancel: () => { cleanup(); screens.hideOverlay(); },
+  };
+
+  app.querySelector('#btn-cal-cancel')?.addEventListener('click', () => calibration?.cancel());
+}
+
+app.querySelector('#calibrate-btn')?.addEventListener('click', startLatencyCalibration);
+
+// ---------- Botão "Instalar app" (PWA) ----------
+
+const installBtn = app.querySelector('#install-btn');
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  installBtn?.classList.remove('hidden');
+});
+installBtn?.addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  try {
+    await deferredInstallPrompt.userChoice;
+  } catch {
+    /* escolha cancelada/indisponível */
+  }
+  deferredInstallPrompt = null;
+  installBtn?.classList.add('hidden');
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  installBtn?.classList.add('hidden');
+});
+
 // ---------- PWA ----------
 
 if ('serviceWorker' in navigator) {
@@ -751,4 +944,6 @@ if ('serviceWorker' in navigator) {
 initRotateOverlay(app.querySelector('#rotate-overlay'));
 
 renderTurmaUI();
+renderRecords();
+refreshLatencyLabel();
 screens.show('home');

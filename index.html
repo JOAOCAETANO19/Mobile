@@ -45,7 +45,10 @@
           <input id="file-input" type="file" accept="audio/*" hidden />
         </label>
         <button id="demo-btn" class="secondary">🎮 Música do jogo (demo 128 BPM)</button>
+        <button id="install-btn" class="secondary hidden">📲 Instalar app</button>
       </div>
+
+      <div id="home-records" class="records hidden"></div>
 
       <div id="search-results" class="results"></div>
 
@@ -70,6 +73,11 @@
             <button id="backend-test-btn">Testar</button>
           </div>
           <p id="backend-status" class="hint"></p>
+          <p class="hint">
+            🎧 Latência do áudio — fone Bluetooth atrasa o som e atrapalha o ritmo.
+            Toque no ritmo dos bipes para calibrar. Atual: <strong id="latency-value">0 ms</strong>
+            <button id="calibrate-btn" class="secondary">Calibrar latência</button>
+          </p>
         </div>
       </details>
 

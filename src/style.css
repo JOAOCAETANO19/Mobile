@@ -385,6 +385,63 @@ html, body {
 .turma-name { color: var(--gold); }
 .turma-pos { opacity: 0.7; font-size: 13px; }
 
+/* ---------- Recordes locais (home) ---------- */
+
+.records {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+}
+.records.hidden { display: none; }
+.records h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.records ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.records li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.records li .rec-track {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.records li .rec-stats { opacity: 0.75; white-space: nowrap; }
+
+/* Botão "Instalar app" escondido até o navegador oferecer a instalação */
+#install-btn.hidden { display: none; }
+
+/* Linha "novo recorde" no overlay de vitória */
+.record-line {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--gold);
+  text-shadow: 0 0 12px rgba(255, 209, 102, 0.55);
+}
+
+/* Calibração de latência: card inteiro é alvo de toque */
+.overlay-card.calibration { cursor: pointer; user-select: none; -webkit-user-select: none; }
+.cal-count {
+  font-family: 'Space Grotesk', 'Poppins', sans-serif;
+  font-size: 34px;
+  font-weight: 700;
+  margin: 8px 0 4px;
+  color: var(--accent-2);
+}
+
 /* ---------- Overlays (pausa / morte / vitória) ---------- */
 
 .overlay {

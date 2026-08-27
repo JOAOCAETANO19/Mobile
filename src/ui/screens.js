@@ -121,14 +121,33 @@ export class Screens {
     `;
   }
 
-  finishOverlayHtml({ score, bestCombo }) {
+  finishOverlayHtml({ score, bestCombo, record = false }) {
     return `
       <div class="overlay-card">
         <h2>🏁 Música concluída!</h2>
+        ${record ? '<p class="record-line">🏆 Novo recorde nessa música!</p>' : ''}
         <p>Pontuação final: <strong>${score}</strong> · Melhor combo: <strong>${bestCombo}x</strong></p>
         <div class="overlay-actions">
           <button id="btn-play-again">Jogar de novo</button>
           <button id="btn-quit" class="secondary">Voltar ao menu</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /** Resultado da calibração de latência (ou falha por poucos toques válidos). */
+  calibrateResultHtml({ offsetMs, used, total }) {
+    const ok = used > 0;
+    return `
+      <div class="overlay-card">
+        <h2>${ok ? '🎧 Latência calibrada!' : '🎧 Quase lá!'}</h2>
+        <p>${
+          ok
+            ? `Atraso medido: <strong>${offsetMs} ms</strong> (${used}/${total} toques válidos) — já está valendo nos julgamentos!`
+            : `Não consegui medir (${used}/${total} toques válidos). Tente de novo seguindo os bipes.`
+        }</p>
+        <div class="overlay-actions">
+          <button id="btn-cal-close">${ok ? 'Fechar' : 'Tentar de novo depois'}</button>
         </div>
       </div>
     `;

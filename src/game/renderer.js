@@ -466,6 +466,27 @@ export class Renderer {
     ctx.restore();
   }
 
+  /**
+   * Fantasma da melhor tentativa: cubo translúcido correndo na altura gravada.
+   */
+  drawGhost(yCells) {
+    const { ctx } = this;
+    const x = this.widthCss * PLAYER_SCREEN_X_RATIO;
+    const s = this.cellPx * 0.8;
+    const cy = this.groundY() - yCells * this.cellPx - s / 2;
+
+    ctx.save();
+    ctx.globalAlpha = 0.32;
+    ctx.strokeStyle = '#9fe9ff';
+    ctx.fillStyle = 'rgba(159, 233, 255, 0.16)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([s * 0.18, s * 0.14]);
+    roundRectPath(ctx, x - s / 2, cy - s / 2, s, s, s * 0.18);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
   drawPlayer(player, beatRingProgress, opts = {}) {
     const { ctx } = this;
     const { trail = [], shieldActive = false, time = 0 } = opts;

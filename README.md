@@ -214,6 +214,16 @@ licenciada |
   Estado salvo no aparelho; suporta revanche com a mesma turma.
 - **Pausa automática** ao trocar de aba/aplicativo (`visibilitychange`) — sem dessincronia
   entre a música e o jogo ao voltar.
+- **Calibração de latência do áudio** 🎧 (`src/core/latency.js`): fone Bluetooth atrasa o
+  som — toque no ritmo dos 8 bipes e o jogo compensa o atraso nas janelas de
+  PERFEITO/BOM (só o julgamento; o visual continua sincronizado ao relógio do áudio).
+- **Recordes locais** 🏆 (`src/game/stats.js`): melhor score/combo/% por música salvo no
+  aparelho, seção "Seus recordes" na home e selo de "Novo recorde!" na tela de vitória.
+- **Fantasma da melhor tentativa** 👻 (`src/game/ghost.js`): a trajetória da sua melhor
+  corrida em cada música vira um cubo translúcido correndo junto — só dados locais,
+  amostrados a 20 Hz (salva quando você bate seu próprio recorde de progresso).
+- **Botão "Instalar app"** 📲: aparece na home quando o navegador oferece a instalação
+  do PWA (`beforeinstallprompt`) — sem precisar caçar no menu do navegador.
 
 ## 🚀 Próximos passos sugeridos
 

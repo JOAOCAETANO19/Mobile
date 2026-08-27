@@ -194,8 +194,11 @@ export class GameEngine {
     // Modo Batida: só aceita toque se não estiver no ar.
     if (this.player.jumping) return;
 
-    const beat = this.nearestBeat(currentTime);
-    const deltaMs = (currentTime - beat.time) * 1000;
+    // Compensação de latência do áudio (calibrada no aparelho): o jogador toca
+    // no que OUVIU, que chega offset segundos depois — julga pelo tempo corrigido.
+    const judgedTime = currentTime - (this.audioOffsetSec || 0);
+    const beat = this.nearestBeat(judgedTime);
+    const deltaMs = (judgedTime - beat.time) * 1000;
     const absMs = Math.abs(deltaMs);
     const beatDurationMs = this.physics.T * 1000;
     const windows = judgeWindowsForBeat(beatDurationMs); // tolerância musical
