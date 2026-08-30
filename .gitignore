@@ -4,3 +4,8 @@ dist/
 *.log
 .env
 .env.local
+
+# Cópia local da documentação do trabalho (fica só no computador, sem ir no git)
+/DOCUMENTACAO.pdf
+/DOCUMENTACAO.md
+/DOCUMENTACAO.html
