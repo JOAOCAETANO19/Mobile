@@ -86,7 +86,13 @@ test('gerador musical: trecho com onsets gera mais obstáculos que silêncio', (
   const base = { bpm: 120, durationSec: 12, sections };
   const track = { title: 'M', artist: 'N' };
   const { T } = physicsForBpm(120);
-  const dense = { ...base, onsets: generateBeatGrid(120, 12).map((b) => ({ time: b.time + T / 2, strength: 0.4 })) };
+  // Cheia: batida forte a cada passo + energia alta → o arquétipo inclina para
+  // gerar denso; a mesma estrutura quase vazia descansa muito mais.
+  const dense = {
+    ...base,
+    onsets: generateBeatGrid(120, 12).map((b) => ({ time: b.time + T / 2, strength: 0.8 })),
+    frames: { rms: Array(24).fill(0.9), centroid: Array(24).fill(0.3), times: [] },
+  };
   const sparse = { ...base, onsets: [{ time: 0.25, strength: 0.4 }] }; // música quase vazia
   const nDense = generateLevel(dense, track).obstacles.length;
   const nSparse = generateLevel(sparse, track).obstacles.length;

@@ -2,6 +2,7 @@
 // Geração determinística: mesma análise + mesma seed -> sempre o mesmo mapa.
 
 import { createRng, seedFromTrack } from '../core/rng.js';
+import { classifyMood, moodStrength, tuningFor } from './archetypes.js';
 
 export const CELL = 1; // unidade de mundo (1 célula = 1 unidade lógica, renderer escala em px)
 export const JUMP_HEIGHT_CELLS = 1.9;
@@ -69,9 +70,14 @@ const PATTERN_WEIGHTS = {
 const DEFAULT_PATTERN_WEIGHTS = PATTERN_WEIGHTS.flow;
 
 /** Sorteia o padrão rítmico determinísticamente (RNG injetado). */
-function pickPattern(rng, sectionLabel, obstaclesPlaced, beatsLeft) {
+function pickPattern(rng, sectionLabel, obstaclesPlaced, beatsLeft, patternBias = null) {
   if (obstaclesPlaced < INTRO_SPIKE_BEATS) return 'single';
-  const weights = PATTERN_WEIGHTS[sectionLabel] || DEFAULT_PATTERN_WEIGHTS;
+  const base = PATTERN_WEIGHTS[sectionLabel] || DEFAULT_PATTERN_WEIGHTS;
+  // Afluência por arquétipo: multiplica pesos pelos vieses (vazio = nulos → sorteio clássico).
+  const weights = {};
+  for (const [name, w] of Object.entries(base)) {
+    weights[name] = Math.max(0, w * (1 + (patternBias?.[name] ?? 0)));
+  }
   const candidates = [];
   let total = 0;
   for (const [name, weight] of Object.entries(weights)) {
@@ -90,9 +96,13 @@ function pickPattern(rng, sectionLabel, obstaclesPlaced, beatsLeft) {
 }
 
 /** Sorteia o tipo do obstáculo determinísticamente (RNG injetado). */
-function pickObstacleType(rng, sectionLabel, obstaclesPlaced, beatsSinceLastShield) {
+function pickObstacleType(rng, sectionLabel, obstaclesPlaced, beatsSinceLastShield, typeBias = null) {
   if (obstaclesPlaced < INTRO_SPIKE_BEATS) return 'spike';
-  const weights = TYPE_WEIGHTS[sectionLabel] || DEFAULT_TYPE_WEIGHTS;
+  const base = TYPE_WEIGHTS[sectionLabel] || DEFAULT_TYPE_WEIGHTS;
+  const weights = {};
+  for (const [type, w] of Object.entries(base)) {
+    weights[type] = Math.max(0, w * (1 + (typeBias?.[type] ?? 0)));
+  }
   const candidates = [];
   let total = 0;
   for (const [type, weight] of Object.entries(weights)) {
@@ -150,7 +160,16 @@ export function generateBeatGrid(bpm, durationSec, startOffset = 0) {
 export function generateLevel(analysis, track = {}) {
   const { bpm, sections, durationSec } = analysis;
   const { T } = physicsForBpm(bpm);
-  const rng = createRng(seedFromTrack({ ...track, duration: durationSec }));
+
+  // Arquétipo musical: a "personalidade" da música afina como o mapa é criado
+  // (densidade, escolha de obstáculos, moedas). Sem dados de sinal → tunagem neutra,
+  // comportamento idêntico ao clássico.
+  const moodKey = classifyMood(analysis);
+  const moodForce = moodStrength(analysis); // 0..1 — intensidade visual/bruta
+  const tune = tuningFor(analysis);
+
+  const seed = seedFromTrack({ ...track, duration: durationSec });
+  const rng = createRng(seed);
 
   const beats = generateBeatGrid(bpm, durationSec);
   const obstacles = [];
@@ -180,13 +199,16 @@ export function generateLevel(analysis, track = {}) {
   for (let i = 0; i < beats.length; i++) {
     const beat = beats[i];
     const section = sectionAt(sections, beat.time) || { label: 'flow', color: '#7c5cff' };
-    let density = SECTION_DENSITY[section.label] ?? 2;
+    const rawDensity = SECTION_DENSITY[section.label] ?? 2;
+    // Afina por arquétipo (mantém 0 → 0: seções de respiro continuam sem obstáculo).
+    let density = rawDensity > 0 ? Math.max(1, Math.round(rawDensity * tune.densityMul)) : 0;
     beatsSinceLastShield++;
 
-    // Build em rampa: a segunda metade do build densifica conforme o drop se aproxima.
+    // Build em rampa: a parte final do build densifica conforme o drop se aproxima
+    // (o ponto em que a rampa dispara varia por arquétipo).
     if (section.label === 'build' && section.end > section.start) {
       const frac = (beat.time - section.start) / (section.end - section.start);
-      if (frac > 0.55) density = Math.max(1, density - 1);
+      if (frac > tune.swellRampFrac) density = Math.max(1, density - 1);
     }
 
     // Respira de frase: 1 batida livre a cada 8 (2 compassos), fora do drop.
@@ -199,8 +221,10 @@ export function generateLevel(analysis, track = {}) {
       const firstPlacements = obstacles.length < INTRO_SPIKE_BEATS;
 
       // Sem batida real perto: a música está vazia aqui — o mapa descansa junto
-      // (55% de chance de pular; fora do drop, que sempre mantém a pressão).
-      if (strength === 0 && !firstPlacements && section.label !== 'drop' && rng() < 0.55) {
+      // (chance de poupar varia por arquétipo; fora do drop; pula 1 batida de
+      // fato, sem tentar de novo já na batida seguinte).
+      if (strength === 0 && !firstPlacements && section.label !== 'drop' && rng() < tune.silenceChance) {
+        nextPlaceBeat = i + 1; // descanso de verdade: essa batida fica vazia
         continue;
       }
 
@@ -210,7 +234,7 @@ export function generateLevel(analysis, track = {}) {
         section.label === 'drop' && beat.time - section.start < T && !impactedDrops.has(section.start);
       if (beatIsDropStart) impactedDrops.add(section.start);
 
-      let patternName = pickPattern(rng, section.label, obstacles.length, beats.length - i);
+      let patternName = pickPattern(rng, section.label, obstacles.length, beats.length - i, tune.patternBias);
       if (beatIsDropStart) patternName = 'single';
       else if (strength != null && strength >= 0.66 && !firstPlacements && beats.length - i >= 2 && section.label !== 'build') {
         patternName = 'double'; // acento forte vira sequência de dois pulos
@@ -222,7 +246,8 @@ export function generateLevel(analysis, track = {}) {
         const slotBeatIndex = i + Math.floor(slot.offset); // batida ocupada pelo slot
         const slotTime = beats[slotBeatIndex].time + T * (slot.offset - Math.floor(slot.offset));
         let type =
-          slot.type || pickObstacleType(rng, section.label, obstacles.length, beatsSinceLastShield);
+          slot.type ||
+          pickObstacleType(rng, section.label, obstacles.length, beatsSinceLastShield, tune.typeBias);
         if (beatIsDropStart && type !== 'shield') type = 'block';
         else if (strength != null && strength >= 0.66 && !slot.type && type === 'spike') type = 'block';
         if (type === 'shield') beatsSinceLastShield = 0;
@@ -242,8 +267,14 @@ export function generateLevel(analysis, track = {}) {
       nextPlaceBeat = i + pattern.beats + (density - 1);
 
       // Moedas: arcos de 3 coroando acentos fortes da música; senão, solitária ocasional.
+      // A generosidade muda por arquétipo (coinBias).
       const coinRoll = rng();
-      if (coinRoll > 0.9 && strength != null && strength >= 0.5 && beat.time + T * 1.25 < durationSec) {
+      if (
+        coinRoll > 1 - 0.1 * tune.coinBias &&
+        strength != null &&
+        strength >= tune.coinStrengthMin &&
+        beat.time + T * 1.25 < durationSec
+      ) {
         for (let k = 0; k < 3; k++) {
           collectibles.push({
             id: `col_${i}_${k}`,
@@ -251,7 +282,7 @@ export function generateLevel(analysis, track = {}) {
             section: section.label,
           });
         }
-      } else if (coinRoll > 0.75) {
+      } else if (coinRoll > 1 - 0.25 * tune.coinBias) {
         collectibles.push({
           id: `col_${i}`,
           time: beat.time + T * 0.25,
@@ -268,8 +299,8 @@ export function generateLevel(analysis, track = {}) {
     for (const o of onsets) {
       const s = sectionAt(sections, o.time);
       if (!s || (SECTION_DENSITY[s.label] ?? 2) !== 0) continue;
-      if ((o.strength ?? 0) < 0.55) continue;
-      if (o.time - lastCoinTime < T * 1.5) continue;
+      if ((o.strength ?? 0) < tune.melodicStrengthMin) continue;
+      if (o.time - lastCoinTime < T * 1.5 * tune.coinGapMul) continue;
       collectibles.push({ id: `col_m_${collectibles.length}`, time: o.time, section: s.label });
       lastCoinTime = o.time;
     }
@@ -284,7 +315,9 @@ export function generateLevel(analysis, track = {}) {
     obstacles,
     collectibles,
     sections,
-    seed: seedFromTrack({ ...track, duration: durationSec }),
+    seed, // determinístico: mesma análise + seed → mesmo mapa
+    mood: moodKey, // arquétipo (cenário/banner)
+    moodStrength: moodForce, // 0..1 (afina a intensidade do cenário)
   };
 }
 

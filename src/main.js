@@ -24,6 +24,7 @@ import { getAudioOffsetMs, setAudioOffsetMs, averageOffset, matchTapsToTicks } f
 import { trackKey, loadStats, saveStats, applyRunToStats, topPlayed } from './game/stats.js';
 import { sampleGhost, ghostYAt, saveGhostFor, loadGhostFor } from './game/ghost.js';
 import { applyThemeToSections, getThemeName, setThemeName } from './game/themes.js';
+import { getArchetype, applyArchetypePalette } from './game/archetypes.js';
 
 const app = document.querySelector('#app');
 const screens = new Screens(app);
@@ -36,6 +37,7 @@ let level = null;
 let rafId = null;
 let judgeState = { text: '', alpha: 0 };
 let milestoneState = { text: '', alpha: 0 };
+let pendingMoodBanner = null; // banner do arquétipo (exibido no início da fase)
 let lastFrameTime = performance.now();
 
 // Contagem regressiva 3-2-1 antes de iniciar/retomar (cenário congelado no ponto de partida).
@@ -259,9 +261,20 @@ async function runAnalysisAndStart(audioBuffer, trackMeta) {
   const analysis = analyzeAudioBuffer(audioBuffer);
   screens.setLoadingProgress(0.9);
   level = generateLevel(analysis, trackMeta);
-  // Tema visual escolhido nas configurações ('auto' = cores que a análise da música escolheu).
+  // Arquétipo musical: a "personalidade" detectada da música (Fúria/Glitch/Noturno/Luna)
+  // afinou o gerador e define o clima visual da fase.
+  const arch = getArchetype(analysis);
+  level = { ...level, archetype: arch }; // renderFrame usa os visuais do arquétipo
+  screens.setLoadingText(`${arch.emoji} Estilo detectado: ${arch.label}!`);
+  // Paleta: tema escolhido manualmente tem prioridade; em 'auto', as cores da
+  // própria música (via centroide), já refinada pelo arquétipo.
   const theme = getThemeName();
-  if (theme !== 'auto') level = { ...level, sections: applyThemeToSections(level.sections, theme) };
+  if (theme !== 'auto') {
+    level = { ...level, sections: applyThemeToSections(level.sections, theme) };
+  } else {
+    level = { ...level, sections: applyArchetypePalette(level.sections, arch.key) };
+  }
+  pendingMoodBanner = `${arch.emoji} ${arch.label.toUpperCase()} — ${arch.desc}`;
   screens.setLoadingProgress(1);
 
   startGame(audioBuffer, level);
@@ -278,6 +291,11 @@ function startGame(audioBuffer, lvl) {
   // Estado por partida: badge da música, replay da morte, turma, recordes e fantasma.
   lastGameBuffers = { audioBuffer, lvl };
   deathCam = null;
+  // Banner do arquétipo musical detectado (aparece no primeiro quadro, some sozinho).
+  if (pendingMoodBanner) {
+    milestoneState = { text: pendingMoodBanner, alpha: 1.8 };
+    pendingMoodBanner = null;
+  }
   latestProgressPct = 0;
   turmaRunRecorded = false;
   runStatsSaved = false;
@@ -574,7 +592,14 @@ function renderFrame(currentTime) {
 
   renderer.clear();
   renderer.beginScene();
-  renderer.drawBackground(section, beatProgress, currentTime, worldX);
+  const arch = level.archetype;
+  renderer.drawBackground(
+    section,
+    beatProgress,
+    currentTime,
+    worldX,
+    arch ? { ...arch.visuals, strength: level.moodStrength } : null
+  );
   renderer.drawGround(section, beatProgress, worldX);
   renderer.drawHitLine(beatProgress, section?.glow || '#4dffea');
 

@@ -81,41 +81,54 @@ export class Renderer {
 
   // ---------- Fundo synthwave ----------
 
-  drawBackground(section, beatPulse, time, worldX) {
+  /**
+   * Fundo da fase. Quando o mapa traz um arquétipo (mg), o cenário veste a
+   * personalidade musical: céu, sol/lua, montanhas e partículas ambientes
+   * (fogo, lasers, estrelas fortes, vagalumes) afinadas pela força da faixa.
+   */
+  drawBackground(section, beatPulse, time, worldX, mg = null) {
     const { ctx, widthCss } = this;
     const horizonY = this.horizonY();
     const color = section?.color || 'hsl(260,70%,45%)';
     const glow = section?.glow || 'hsl(260,70%,65%)';
+    const K = Math.min(1, Math.max(0, mg?.strength ?? 0)); // 0..1 — força da música
+    const sunCols = mg?.sun || ['#ffe27a', '#ff9a4d', '#ff3d81'];
+    const sunHalo = mg?.sunHalo || '255, 120, 90';
+    const skyMid = mg?.skyMid || '#170a30';
+    const mtnA = mg?.mtnA || '#2b1552';
+    const mtnB = mg?.mtnB || '#170b2e';
 
-    // Céu: gradiente noturno tingido pela cor da seção musical.
+    // Céu: gradiente noturno com o tom central do arquétipo.
     const grad = ctx.createLinearGradient(0, 0, 0, horizonY);
     grad.addColorStop(0, '#06030f');
-    grad.addColorStop(0.6, '#170a30');
+    grad.addColorStop(0.6, skyMid);
     grad.addColorStop(1, shade(color, -38));
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, widthCss, horizonY + 1);
 
-    // Estrelas (fixas, com cintilação suave).
+    // Estrelas (fixas, cintilando; no Noturno brilham mais e maiores).
+    const starBoost = mg?.particle === 'star' ? 1.7 : 1;
     ctx.save();
     ctx.fillStyle = '#ffffff';
     for (let i = 0; i < 42; i++) {
       const sx = (((i * 733) % 997) / 997) * widthCss;
       const sy = (((i * 419) % 991) / 991) * horizonY * 0.72;
       const tw = 0.4 + 0.6 * Math.abs(Math.sin((time || 0) * 0.8 + i * 1.7));
-      ctx.globalAlpha = 0.15 + 0.4 * tw;
-      ctx.fillRect(sx, sy, 2, 2);
+      ctx.globalAlpha = Math.min(1, (0.15 + 0.4 * tw) * starBoost * (0.8 + 0.5 * K));
+      const s = 2 * (mg?.particle === 'star' ? 1.3 + 0.5 * K : 1);
+      ctx.fillRect(sx, sy, s, s);
     }
     ctx.restore();
 
-    // Sol synthwave pulsante, sincronizado com a batida.
+    // Sol/lua pulsante, na paleta do arquétipo, sincronizado com a batida.
     const cx = widthCss * 0.63;
     const cy = horizonY - this.cellPx * 0.85;
-    const R = this.cellPx * 1.35 * (1 + 0.09 * beatPulse);
+    const R = this.cellPx * 1.35 * (1 + 0.09 * beatPulse + 0.12 * K);
 
     ctx.save();
     const halo = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, R * 2.1);
-    halo.addColorStop(0, `rgba(255, 120, 90, ${0.22 + 0.3 * beatPulse})`);
-    halo.addColorStop(1, 'rgba(255, 120, 90, 0)');
+    halo.addColorStop(0, `rgba(${sunHalo}, ${0.22 + 0.3 * beatPulse})`);
+    halo.addColorStop(1, `rgba(${sunHalo}, 0)`);
     ctx.fillStyle = halo;
     ctx.fillRect(cx - R * 2.2, cy - R * 2.2, R * 4.4, R * 4.4);
     ctx.restore();
@@ -125,28 +138,104 @@ export class Renderer {
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     ctx.clip();
     const sun = ctx.createLinearGradient(0, cy - R, 0, cy + R);
-    sun.addColorStop(0, '#ffe27a');
-    sun.addColorStop(0.5, '#ff9a4d');
-    sun.addColorStop(1, '#ff3d81');
+    sun.addColorStop(0, sunCols[0]);
+    sun.addColorStop(0.5, sunCols[1]);
+    sun.addColorStop(1, sunCols[2]);
     ctx.fillStyle = sun;
     ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-    // Listras horizontais clássicas (mais grossas em direção à base).
+    // Listras horizontais clássicas (mais finas na lua/astros frios).
     ctx.globalCompositeOperation = 'destination-out';
+    const bandBase = mg?.sun ? 0.55 : 1;
     for (let i = 0; i < 6; i++) {
       const bandY = cy + R * (0.06 + i * 0.155);
-      const bandH = (2 + i * 2.1) * (this.cellPx / 64);
+      const bandH = (2 + i * 2.1) * (this.cellPx / 64) * bandBase;
       ctx.fillRect(cx - R, bandY, R * 2, bandH);
     }
     ctx.restore();
 
-    // Duas camadas de montanhas em parallax (rolam com o mundo em velocidades distintas).
+    // Duas camadas de montanhas em parallax (rolam com o mundo, cores do arquétipo).
     const scroll = (worldX || 0) * this.cellPx;
-    this.drawMountainLayer(scroll * 0.1, horizonY, '#2b1552', (wx) =>
+    this.drawMountainLayer(scroll * 0.1, horizonY, mtnA, (wx) =>
       this.cellPx * (0.5 + 0.45 * Math.sin(wx * 0.0042 + 1.2) + 0.2 * Math.sin(wx * 0.0113 + 0.5) + 0.08 * Math.sin(wx * 0.0263 + 2.1))
     );
-    this.drawMountainLayer(scroll * 0.26, horizonY, '#170b2e', (wx) =>
+    this.drawMountainLayer(scroll * 0.26, horizonY, mtnB, (wx) =>
       this.cellPx * (0.2 + 0.3 * Math.sin(wx * 0.0061 + 4.0) + 0.14 * Math.sin(wx * 0.0171 + 1.9))
     );
+
+    // Partículas ambientes do arquétipo (faíscas/lasers/vagalumes), pulsando na batida.
+    if (mg && mg.particle && mg.particle !== 'star') {
+      this.drawAmbientParticles(mg.particle, beatPulse, time, K, mg.tint);
+    }
+  }
+
+  /**
+   * Partículas ambientes por tipo, com posições 100% determinísticas por índice
+   * (não há RNG mutável: mesma fase, mesmos frames). Quantidade/velocidade
+   * aumentam com K (a "brutalidade" da música).
+   */
+  drawAmbientParticles(kind, beatPulse, time, K, tint) {
+    const { ctx, widthCss } = this;
+    const horizonY = this.horizonY();
+    const wave = 0.75 + 0.5 * beatPulse;
+
+    ctx.save();
+    if (kind === 'ember') {
+      // Faíscas de fogo subindo do horizonte.
+      const count = Math.round(16 + 14 * K);
+      for (let i = 0; i < count; i++) {
+        const fx = (((i * 733 + 179) % 997) / 997);
+        const fz = (((i * 421 + 311) % 991) / 991);
+        const span = horizonY * 0.96;
+        const x = fx * widthCss + Math.sin(time * 1.3 + fz * 6.3) * 14;
+        const y = horizonY + 10 - ((time * 36 * (0.55 + fz * 0.9) + fz * span * 4) % span);
+        const a = Math.min(1, (0.2 + 0.55 * Math.abs(Math.sin(time * 5.1 + i * 2.4))) * wave);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = i % 3 ? '#ffb05c' : '#ff6a3d';
+        ctx.shadowColor = '#ff7a3d';
+        ctx.shadowBlur = 7;
+        const s = 2 + (i % 2) + K;
+        ctx.fillRect(x, y, s, s);
+      }
+    } else if (kind === 'laser') {
+      // Riscos diagonais de laser correndo no céu, pulsando na batida.
+      const count = Math.round(10 + 10 * K);
+      ctx.lineWidth = 2;
+      for (let i = 0; i < count; i++) {
+        const fz = (((i * 421 + 311) % 991) / 991);
+        const y = 24 + fz * (horizonY - 48);
+        const speed = widthCss * (0.55 + fz * 0.75) * (1 + 0.5 * K);
+        const head = ((time * speed + i * 337) % (widthCss + 260)) - 130;
+        const len = 60 + 130 * fz;
+        const flicker = Math.abs(Math.sin(time * 3.2 + i * 1.31));
+        ctx.globalAlpha = Math.min(1, (0.05 + 0.5 * beatPulse) * (0.3 + 0.7 * flicker) + 0.06 * K);
+        ctx.strokeStyle = i % 2 ? (tint || '#2ef2ff') : '#ff4dd8';
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.shadowBlur = 9;
+        ctx.beginPath();
+        ctx.moveTo(head - len, y + len * 0.26);
+        ctx.lineTo(head, y);
+        ctx.stroke();
+      }
+    } else if (kind === 'firefly') {
+      // Vagalumes à deriva, quentes e suaves.
+      const count = Math.round(9 + 8 * K);
+      for (let i = 0; i < count; i++) {
+        const fx = (((i * 733 + 179) % 997) / 997);
+        const fz = (((i * 421 + 311) % 991) / 991);
+        const x = fx * widthCss + Math.sin(time * 0.5 + i * 2.2) * 22 + Math.sin(time * 0.17 + i * 7) * 12;
+        const y = horizonY * (0.15 + fz * 0.75) + Math.cos(time * 0.4 + i * 3.1) * 16;
+        const a = Math.min(1, (0.18 + 0.5 * Math.abs(Math.sin(time * 1.1 + i * 1.9))) * wave);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#ffedab';
+        ctx.shadowColor = '#ffd96b';
+        ctx.shadowBlur = 10;
+        const r = 1.9 + 0.9 * Math.abs(Math.sin(time * 2 + i)) + K;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 
   drawMountainLayer(scrollPx, horizonY, fill, heightAt) {
