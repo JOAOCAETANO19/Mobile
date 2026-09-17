@@ -21,7 +21,16 @@ import { createDemoTrackBuffer, DEMO_TRACK_META } from './demo/demotrack.js';
 import { initRotateOverlay, lockLandscape, unlockLandscape } from './core/orientation.js';
 import { emptyTurma, normalizePlayerName, restartRound, sortTurmaResults, medalFor } from './game/turma.js';
 import { getAudioOffsetMs, setAudioOffsetMs, averageOffset, matchTapsToTicks } from './core/latency.js';
-import { trackKey, loadStats, saveStats, applyRunToStats, topPlayed } from './game/stats.js';
+import { trackKey, loadStats, saveStats, applyRunToStats, topPlayed, setStatsScope } from './game/stats.js';
+import {
+  AVATARS,
+  listAccounts,
+  getActiveAccount,
+  createAccount,
+  verifyAccountPassword,
+  switchAccount,
+  deleteAccount,
+} from './core/accounts.js';
 import { sampleGhost, ghostYAt, saveGhostFor, loadGhostFor } from './game/ghost.js';
 import { applyThemeToSections, getThemeName, setThemeName } from './game/themes.js';
 import { getArchetype, applyArchetypePalette } from './game/archetypes.js';
@@ -852,6 +861,189 @@ function renderRecords() {
   }
   el.appendChild(ul);
 }
+
+// ---------- Conta local (usuário + avatar; recordes separados por jogador) ----------
+
+const acct = {
+  chip: app.querySelector('#account-chip'),
+  chipAvatar: app.querySelector('#account-chip-avatar'),
+  chipName: app.querySelector('#account-chip-name'),
+  chipAction: app.querySelector('#account-chip-action'),
+  section: app.querySelector('#account-section'),
+  active: app.querySelector('#account-active'),
+  list: app.querySelector('#account-list'),
+  createBtn: app.querySelector('#account-create-btn'),
+  form: app.querySelector('#account-form'),
+  name: app.querySelector('#account-name'),
+  pass: app.querySelector('#account-pass'),
+  avatars: app.querySelector('#account-avatars'),
+  formErr: app.querySelector('#account-form-err'),
+  cancel: app.querySelector('#account-cancel'),
+  login: app.querySelector('#account-login'),
+  loginLabel: app.querySelector('#account-login-label'),
+  loginPass: app.querySelector('#account-login-pass'),
+  loginOk: app.querySelector('#account-login-ok'),
+  loginCancel: app.querySelector('#account-login-cancel'),
+  loginErr: app.querySelector('#account-login-err'),
+};
+let acctSelectedAvatar = AVATARS[0];
+let pendingLoginAccount = null; // conta esperando senha para entrar
+
+function renderAvatarGrid() {
+  if (!acct.avatars) return;
+  acct.avatars.innerHTML = '';
+  for (const emoji of AVATARS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'avatar-btn' + (emoji === acctSelectedAvatar ? ' selected' : '');
+    b.textContent = emoji;
+    b.setAttribute('aria-pressed', emoji === acctSelectedAvatar ? 'true' : 'false');
+    b.addEventListener('click', () => {
+      acctSelectedAvatar = emoji;
+      renderAvatarGrid();
+    });
+    acct.avatars.appendChild(b);
+  }
+}
+
+function hideAccountLogin() {
+  pendingLoginAccount = null;
+  acct.login?.classList.add('hidden');
+  if (acct.loginErr) acct.loginErr.textContent = '';
+}
+
+function refreshAccountUI() {
+  const accounts = listAccounts();
+  const active = getActiveAccount();
+  // Chip no topo da home: mostra quem está logado (ou convida a criar).
+  if (acct.chip) {
+    acct.chipAvatar.textContent = active?.avatar || '👤';
+    acct.chipName.textContent = active ? active.name : 'Criar conta — recordes por jogador';
+    acct.chipAction.textContent = accounts.length > 1 ? 'Trocar' : '';
+  }
+  if (acct.active) {
+    acct.active.textContent = active
+      ? `Jogando como ${active.avatar} ${active.name} — os recordes ficam guardados nesta conta.`
+      : 'Nenhuma conta ativa — crie uma para guardar seus recordes separados dos outros jogadores.';
+  }
+  if (acct.list) {
+    acct.list.innerHTML = '';
+    for (const a of accounts) {
+      const li = document.createElement('div');
+      li.className = 'account-item' + (active?.id === a.id ? ' current' : '');
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'account-pick';
+      pick.textContent = `${a.avatar} ${a.name}${active?.id === a.id ? ' ✓' : ''}`;
+      pick.addEventListener('click', () => pickAccountForLogin(a));
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'account-del';
+      del.title = `Remover a conta ${a.name}`;
+      del.textContent = '✕';
+      del.addEventListener('click', () => removeAccount(a));
+      li.append(pick, del);
+      acct.list.appendChild(li);
+    }
+    acct.list.classList.toggle('hidden', accounts.length === 0);
+  }
+}
+
+/** Ativa a conta e aplica o escopo dela (recordes passam a ser os dela). */
+function activateAccount(id) {
+  const acc = switchAccount(id);
+  if (!acc) return;
+  hideAccountLogin();
+  setStatsScope(acc.id);
+  refreshAccountUI();
+  renderRecords(); // a lista "🏆 Seus recordes" mostra os da conta ativa
+  if (acct.section) acct.section.open = true;
+}
+
+function pickAccountForLogin(acc) {
+  if (!acc.passHash) {
+    activateAccount(acc.id); // sem senha: entra direto
+    return;
+  }
+  pendingLoginAccount = acc;
+  if (acct.login) {
+    acct.login.classList.remove('hidden');
+    acct.loginLabel.textContent = `Senha da conta ${acc.avatar} ${acc.name}:`;
+    acct.loginPass.value = '';
+    acct.loginErr.textContent = '';
+    acct.loginPass.focus();
+  }
+}
+
+async function submitAccountLogin() {
+  if (!pendingLoginAccount) return;
+  const ok = await verifyAccountPassword(pendingLoginAccount, acct.loginPass?.value || '');
+  if (!ok) {
+    acct.loginErr.textContent = 'Senha incorreta — tenta de novo.';
+    acct.loginPass.select();
+    return;
+  }
+  activateAccount(pendingLoginAccount.id);
+}
+
+function removeAccount(acc) {
+  deleteAccount(acc.id);
+  if (pendingLoginAccount?.id === acc.id) hideAccountLogin();
+  const active = getActiveAccount();
+  setStatsScope(active ? active.id : null); // apagou a ativa? reescopado pela função o que sobrou
+  refreshAccountUI();
+  renderRecords();
+}
+
+async function submitCreateAccount(e) {
+  e?.preventDefault();
+  acct.formErr.textContent = '';
+  try {
+    await createAccount({
+      name: acct.name.value,
+      password: acct.pass.value,
+      avatar: acctSelectedAvatar,
+    });
+    acct.name.value = '';
+    acct.pass.value = '';
+    acct.form.classList.add('hidden');
+    acct.createBtn?.classList.remove('hidden');
+    activateAccount(getActiveAccount().id); // recém-criada já é a ativa
+  } catch (err) {
+    acct.formErr.textContent = err?.message || 'Não deu para criar a conta.';
+  }
+}
+
+acct.chip?.addEventListener('click', () => {
+  if (!acct.section) return;
+  acct.section.open = true;
+  acct.section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+acct.createBtn?.addEventListener('click', () => {
+  acct.form.classList.remove('hidden');
+  acct.createBtn.classList.add('hidden');
+  renderAvatarGrid();
+  acct.name.focus();
+});
+acct.cancel?.addEventListener('click', () => {
+  acct.form.classList.add('hidden');
+  acct.createBtn.classList.remove('hidden');
+  acct.formErr.textContent = '';
+});
+acct.form?.addEventListener('submit', submitCreateAccount);
+acct.loginOk?.addEventListener('click', submitAccountLogin);
+acct.loginCancel?.addEventListener('click', hideAccountLogin);
+acct.loginPass?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    submitAccountLogin();
+  }
+});
+
+// Aplica a conta já ativa (sessão anterior) e pinta a UI na chegada.
+setStatsScope(getActiveAccount()?.id || null);
+refreshAccountUI();
+renderAvatarGrid();
 
 // ---------- Calibração de latência ----------
 

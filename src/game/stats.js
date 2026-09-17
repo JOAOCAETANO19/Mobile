@@ -2,8 +2,22 @@
 // progresso, nº de partidas e conclusões. Lógica pura e testável; a leitura e a
 // escrita do storage ficam aqui mesmo, com storage injetável para testes.
 
-const STORAGE_KEY = 'rhythm-dash-stats-v1';
+const STORAGE_KEY_BASE = 'rhythm-dash-stats-v1';
+let STORAGE_KEY = STORAGE_KEY_BASE; // pode ganhar sufixo da conta ativa
 const MAX_TRACKS = 60; // limpa as mais antigas se passar disso
+
+/**
+ * Escopo por conta local: cada jogador tem os próprios recordes no mesmo
+ * aparelho. `null` volta ao escopo geral (recordes antigos, sem conta).
+ */
+export function setStatsScope(scopeKey) {
+  const suffix = scopeKey ? `@${String(scopeKey).replace(/[^\w:-]/g, '')}` : '';
+  STORAGE_KEY = `${STORAGE_KEY_BASE}${suffix}`;
+}
+
+export function getStatsScopeKey() {
+  return STORAGE_KEY;
+}
 
 /** Chave estável da música a partir dos metadados. */
 export function trackKey(meta) {
