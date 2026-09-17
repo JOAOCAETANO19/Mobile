@@ -5,6 +5,7 @@ export class Screens {
   constructor(root) {
     this.root = root;
     this.els = {
+      welcome: root.querySelector('#screen-welcome'),
       home: root.querySelector('#screen-home'),
       loading: root.querySelector('#screen-loading'),
       game: root.querySelector('#screen-game'),

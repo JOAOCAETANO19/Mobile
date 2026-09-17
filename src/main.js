@@ -30,6 +30,8 @@ import {
   verifyAccountPassword,
   switchAccount,
   deleteAccount,
+  findAccountByIdentifier,
+  clearActiveAccount,
 } from './core/accounts.js';
 import { sampleGhost, ghostYAt, saveGhostFor, loadGhostFor } from './game/ghost.js';
 import { applyThemeToSections, getThemeName, setThemeName } from './game/themes.js';
@@ -875,6 +877,7 @@ const acct = {
   createBtn: app.querySelector('#account-create-btn'),
   form: app.querySelector('#account-form'),
   name: app.querySelector('#account-name'),
+  email: app.querySelector('#account-email'),
   pass: app.querySelector('#account-pass'),
   avatars: app.querySelector('#account-avatars'),
   formErr: app.querySelector('#account-form-err'),
@@ -889,21 +892,26 @@ const acct = {
 let acctSelectedAvatar = AVATARS[0];
 let pendingLoginAccount = null; // conta esperando senha para entrar
 
-function renderAvatarGrid() {
-  if (!acct.avatars) return;
-  acct.avatars.innerHTML = '';
+/** Grade de avatares: duas instâncias (tela de boas-vindas e formulário do lobby). */
+function renderAvatarGrid(container, selectedEmoji, onPick) {
+  if (!container) return;
+  container.innerHTML = '';
   for (const emoji of AVATARS) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'avatar-btn' + (emoji === acctSelectedAvatar ? ' selected' : '');
+    b.className = 'avatar-btn' + (emoji === selectedEmoji ? ' selected' : '');
     b.textContent = emoji;
-    b.setAttribute('aria-pressed', emoji === acctSelectedAvatar ? 'true' : 'false');
-    b.addEventListener('click', () => {
-      acctSelectedAvatar = emoji;
-      renderAvatarGrid();
-    });
-    acct.avatars.appendChild(b);
+    b.setAttribute('aria-pressed', emoji === selectedEmoji ? 'true' : 'false');
+    b.addEventListener('click', () => onPick(emoji));
+    container.appendChild(b);
   }
+}
+
+function renderLobbyAvatarGrid() {
+  renderAvatarGrid(acct.avatars, acctSelectedAvatar, (emoji) => {
+    acctSelectedAvatar = emoji;
+    renderLobbyAvatarGrid();
+  });
 }
 
 function hideAccountLogin() {
@@ -1001,10 +1009,12 @@ async function submitCreateAccount(e) {
   try {
     await createAccount({
       name: acct.name.value,
+      email: acct.email?.value || '',
       password: acct.pass.value,
       avatar: acctSelectedAvatar,
     });
     acct.name.value = '';
+    if (acct.email) acct.email.value = '';
     acct.pass.value = '';
     acct.form.classList.add('hidden');
     acct.createBtn?.classList.remove('hidden');
@@ -1022,7 +1032,7 @@ acct.chip?.addEventListener('click', () => {
 acct.createBtn?.addEventListener('click', () => {
   acct.form.classList.remove('hidden');
   acct.createBtn.classList.add('hidden');
-  renderAvatarGrid();
+  renderLobbyAvatarGrid();
   acct.name.focus();
 });
 acct.cancel?.addEventListener('click', () => {
@@ -1040,10 +1050,99 @@ acct.loginPass?.addEventListener('keydown', (e) => {
   }
 });
 
+// ---------- Tela de boas-vindas (criar conta / entrar ao abrir o jogo) ----------
+
+const welcome = {
+  tabCreate: app.querySelector('#welcome-tab-create'),
+  tabLogin: app.querySelector('#welcome-tab-login'),
+  create: app.querySelector('#welcome-create'),
+  login: app.querySelector('#welcome-login'),
+  name: app.querySelector('#welcome-name'),
+  email: app.querySelector('#welcome-email'),
+  pass: app.querySelector('#welcome-pass'),
+  avatars: app.querySelector('#welcome-avatars'),
+  createErr: app.querySelector('#welcome-create-err'),
+  loginId: app.querySelector('#welcome-login-id'),
+  loginPass: app.querySelector('#welcome-login-pass'),
+  loginErr: app.querySelector('#welcome-login-err'),
+  guest: app.querySelector('#welcome-guest'),
+};
+let welcomeSelectedAvatar = AVATARS[1]; // 👾 é a cara do jogo
+
+function renderWelcomeAvatarGrid() {
+  renderAvatarGrid(welcome.avatars, welcomeSelectedAvatar, (emoji) => {
+    welcomeSelectedAvatar = emoji;
+    renderWelcomeAvatarGrid();
+  });
+}
+
+function welcomeToHome() {
+  refreshAccountUI();
+  renderRecords();
+  screens.show('home');
+}
+
+welcome.tabCreate?.addEventListener('click', () => {
+  welcome.tabCreate.classList.add('active');
+  welcome.tabLogin.classList.remove('active');
+  welcome.create.classList.remove('hidden');
+  welcome.login.classList.add('hidden');
+});
+welcome.tabLogin?.addEventListener('click', () => {
+  welcome.tabLogin.classList.add('active');
+  welcome.tabCreate.classList.remove('active');
+  welcome.login.classList.remove('hidden');
+  welcome.create.classList.add('hidden');
+});
+
+welcome.create?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  welcome.createErr.textContent = '';
+  try {
+    await createAccount({
+      name: welcome.name.value,
+      email: welcome.email.value,
+      password: welcome.pass.value,
+      avatar: welcomeSelectedAvatar,
+    });
+    setStatsScope(getActiveAccount().id);
+    welcome.name.value = welcome.email.value = welcome.pass.value = '';
+    welcomeToHome();
+  } catch (err) {
+    welcome.createErr.textContent = err?.message || 'Não deu para criar a conta.';
+  }
+});
+
+welcome.login?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  welcome.loginErr.textContent = '';
+  const acc = findAccountByIdentifier(welcome.loginId.value);
+  if (!acc) {
+    welcome.loginErr.textContent = 'Não achei essa conta — confere usuário/email.';
+    return;
+  }
+  if (!(await verifyAccountPassword(acc, welcome.loginPass.value))) {
+    welcome.loginErr.textContent = 'Senha incorreta — tenta de novo.';
+    welcome.loginPass.select();
+    return;
+  }
+  switchAccount(acc.id);
+  setStatsScope(acc.id);
+  welcome.loginId.value = welcome.loginPass.value = '';
+  welcomeToHome();
+});
+
+welcome.guest?.addEventListener('click', () => {
+  clearActiveAccount(); // “Continuar sem conta”: ninguém ativo
+  setStatsScope(null);
+  welcomeToHome();
+});
+
 // Aplica a conta já ativa (sessão anterior) e pinta a UI na chegada.
 setStatsScope(getActiveAccount()?.id || null);
 refreshAccountUI();
-renderAvatarGrid();
+renderLobbyAvatarGrid();
+renderWelcomeAvatarGrid();
 
 // ---------- Calibração de latência ----------
 
@@ -1175,4 +1274,5 @@ initRotateOverlay(app.querySelector('#rotate-overlay'));
 renderTurmaUI();
 renderRecords();
 refreshLatencyLabel();
-screens.show('home');
+// Conta ativa de uma sessão anterior? Já entra direto; se não, dá boas-vindas primeiro.
+screens.show(getActiveAccount() ? 'home' : 'welcome');

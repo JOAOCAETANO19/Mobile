@@ -10,6 +10,10 @@ export const NAME_MIN = 2;
 export const NAME_MAX = 16;
 export const PASS_MIN = 4;
 
+/** Normalização e validação de email (regex simples e prática). */
+export const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+export const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+
 /** Normalização: nada de espaço extra no começo/fim nem dobrado no meio. */
 export const normalizeName = (name) => String(name || '').trim().replace(/\s+/g, ' ');
 export const nameMatches = (a, b) =>
@@ -86,7 +90,7 @@ export function getActiveAccount(storage) {
 }
 
 /** Cria a conta e já a deixa ativa. Lança Error com mensagem amigável se inválida. */
-export async function createAccount({ name, password = '', avatar = '' } = {}, storage) {
+export async function createAccount({ name, email = '', password = '', avatar = '' } = {}, storage) {
   const clean = normalizeName(name);
   if (clean.length < NAME_MIN || clean.length > NAME_MAX) {
     throw new Error(`O usuário precisa ter entre ${NAME_MIN} e ${NAME_MAX} caracteres.`);
@@ -95,6 +99,13 @@ export async function createAccount({ name, password = '', avatar = '' } = {}, s
   if (raw.accounts.some((a) => nameMatches(a.name, clean))) {
     throw new Error(`Já existe uma conta chamada “${clean}”.`);
   }
+  const cleanEmail = normalizeEmail(email);
+  if (cleanEmail) {
+    if (!isValidEmail(cleanEmail)) throw new Error('Esse email não parece válido.');
+    if (raw.accounts.some((a) => a.email === cleanEmail)) {
+      throw new Error('Já existe uma conta com esse email.');
+    }
+  }
   if (password && String(password).length < PASS_MIN) {
     throw new Error(`A senha precisa ter pelo menos ${PASS_MIN} caracteres.`);
   }
@@ -102,6 +113,7 @@ export async function createAccount({ name, password = '', avatar = '' } = {}, s
   const account = {
     id: uuid(),
     name: clean,
+    email: cleanEmail,
     avatar: AVATARS.includes(avatar) ? avatar : avatarForName(clean),
     salt,
     passHash: password ? await hashPassword(String(password), salt) : null,
@@ -111,6 +123,24 @@ export async function createAccount({ name, password = '', avatar = '' } = {}, s
   raw.activeId = account.id; // criou, já entra nela
   saveRaw(raw, storage);
   return { ...account };
+}
+
+/** Acha uma conta pelo usuário OU pelo email (login flexível). */
+export function findAccountByIdentifier(identifier, storage) {
+  const target = normalizeEmail(identifier);
+  if (!target) return null;
+  const raw = loadRaw(storage);
+  const acc = raw.accounts.find(
+    (a) => (a.email && a.email === target) || nameMatches(a.name, identifier)
+  );
+  return acc ? { ...acc } : null;
+}
+
+/** Sai da conta (jogar sem conta): nenhuma fica ativa. */
+export function clearActiveAccount(storage) {
+  const raw = loadRaw(storage);
+  raw.activeId = null;
+  saveRaw(raw, storage);
 }
 
 /** Confere a senha de uma conta (conta sem senha: qualquer toque entra). */

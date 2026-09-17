@@ -7,6 +7,8 @@ import {
   NAME_MIN,
   PASS_MIN,
   normalizeName,
+  normalizeEmail,
+  isValidEmail,
   avatarForName,
   listAccounts,
   getActiveAccount,
@@ -14,6 +16,8 @@ import {
   verifyAccountPassword,
   switchAccount,
   deleteAccount,
+  findAccountByIdentifier,
+  clearActiveAccount,
 } from '../src/core/accounts.js';
 
 function memStorage() {
@@ -94,4 +98,37 @@ test('troca de conta ativa funciona e remoção reatribui', async () => {
 test('normalizeName colapsa espaços dobrados', () => {
   assert.equal(normalizeName('  João   Vitor  '), 'João Vitor');
   assert.equal(normalizeName(null), '');
+});
+
+test('email: valida formato, normaliza e impede duplicar', async () => {
+  const s = memStorage();
+  assert.equal(isValidEmail('cleber@escola.com'), true);
+  assert.equal(isValidEmail('naosouemail'), false);
+  assert.equal(isValidEmail('faltam@dominio'), false);
+  await assert.rejects(() => createAccount({ name: 'Email Ruim', email: 'zoado' }, s), /email/i);
+  const acc = await createAccount({ name: 'Cleber', email: '  Cleber@EESCOLA.com ' }, s);
+  assert.equal(acc.email, 'cleber@eescola.com', 'normaliza trecho e caixa');
+  await assert.rejects(() => createAccount({ name: 'Outro', email: 'cleber@eescola.com' }, s), /email/i);
+  await createAccount({ name: 'Sem Email' }, s); // email segue opcional
+});
+
+test('login flexível: encontra por usuário ou por email', async () => {
+  const s = memStorage();
+  const acc = await createAccount({ name: 'Ramon', email: 'ramon@escola.com', password: 'top123' }, s);
+  assert.equal(findAccountByIdentifier('ramon', s)?.id, acc.id);
+  assert.equal(findAccountByIdentifier('RAMON', s)?.id, acc.id); // caixa não importa
+  assert.equal(findAccountByIdentifier('ramon@escola.com', s)?.id, acc.id);
+  assert.equal(findAccountByIdentifier(' RAMON@escola.com ', s)?.id, acc.id);
+  assert.equal(findAccountByIdentifier('ninguem', s), null);
+  assert.equal(await verifyAccountPassword(findAccountByIdentifier('ramon@escola.com', s), 'top123'), true);
+  assert.equal(await verifyAccountPassword(findAccountByIdentifier('ramon@escola.com', s), 'naoe'), false);
+});
+
+test('clearActiveAccount tira a sessão (jogar sem conta)', async () => {
+  const s = memStorage();
+  await createAccount({ name: 'Zed' }, s);
+  assert.ok(getActiveAccount(s));
+  clearActiveAccount(s);
+  assert.equal(getActiveAccount(s), null);
+  assert.equal(listAccounts(s).length, 1, 'a conta continua salva, só estamos deslogados');
 });
