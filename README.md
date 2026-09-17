@@ -190,6 +190,25 @@ licenciada |
 > **prévia de 30s** da busca. Para o jogo ter "as famosas" de fábrica, seria necessário um acordo de
 > licenciamento (como Beat Saber/Rock Band fazem) — fora do alcance de um projeto independente.
 
+## 🗄️ Banco de dados — Supabase (nuvem)
+
+O jogo guarda contas e recordes **online no Supabase** (Postgres + Auth), além das contas locais do aparelho. Configuração em 5 minutos, tudo grátis:
+
+1. **Crie o projeto**: cadastre-se em <https://supabase.com> → **New project** (nome e senha da DB à sua escolha).
+2. **Rode o SQL**: no painel do projeto, abra **SQL Editor → New query**, cole o conteúdo inteiro de
+   [`supabase/schema.sql`](supabase/schema.sql) e clique em **Run**. Isso cria a tabela `records`
+   com **RLS** (cada jogador só lê/grava os próprios recordes).
+3. **Desative a confirmação de email** (pra demo não travar): **Authentication → Providers → Email** →
+   desligue **"Confirm email"** e salve.
+4. **Copie as chaves**: **Settings → API** → copie a **Project URL** e a **anon public key**.
+5. **Conecte no jogo**: abra o Rhythm Dash → **Ajustes do jogo → Banco de dados — Supabase** → cole
+   URL + chave → **Conectar**. ✅ aparece e pronto.
+
+A partir daí, a **tela de boas-vindas** cria contas por email de verdade (Supabase Auth) e os
+recordes de cada música sobem pra tabela `records` automaticamente. Se a nuvem estiver
+desconfigurada, o jogo segue 100% offline com as contas locais. `src/core/supabase.js` é o cliente
+REST (sem SDK, com testes em `tests/supabase.test.js`).
+
 ## 🆕 Desta versão
 
 - **Contagem regressiva 3-2-1** antes de iniciar/retomar (`src/game/countdown.js`, máquina de

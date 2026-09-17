@@ -32,6 +32,7 @@
           <button id="welcome-tab-create" class="welcome-tab active" type="button" role="tab">Criar conta</button>
           <button id="welcome-tab-login" class="welcome-tab" type="button" role="tab">Entrar</button>
         </div>
+        <p id="welcome-storage-hint" class="hint welcome-hint"></p>
 
         <form id="welcome-create" class="welcome-form" autocomplete="off">
           <input id="welcome-name" type="text" maxlength="16" placeholder="Usuário (2–16 letras)" autocomplete="off" />
@@ -129,6 +130,29 @@
             Toque no ritmo dos bipes para calibrar. Atual: <strong id="latency-value">0 ms</strong>
             <button id="calibrate-btn" class="secondary">Calibrar latência</button>
           </p>
+        </div>
+      </details>
+
+      <details class="settings" id="supabase-section">
+        <summary>Banco de dados — Supabase (nuvem) ☁️</summary>
+        <div class="settings-body">
+          <p class="hint">
+            Liga o banco de dados online: contas por email + recordes salvos na nuvem.
+            No seu projeto Supabase, vá em <strong>Settings → API</strong> e copie a
+            <strong>Project URL</strong> e a <strong>anon public key</strong> (guia completo no README).
+          </p>
+          <div class="backend-row">
+            <input id="sb-url" type="url" placeholder="https://SEU-PROJETO.supabase.co" autocomplete="off" />
+          </div>
+          <div class="backend-row">
+            <input id="sb-key" type="password" placeholder="anon public key" autocomplete="off" />
+            <button id="sb-connect" type="button">Conectar</button>
+          </div>
+          <p id="sb-status" class="hint"></p>
+          <div id="sb-logged-row" class="backend-row hidden">
+            <span id="sb-logged-label" class="hint"></span>
+            <button id="sb-logout" type="button" class="secondary">Sair da nuvem</button>
+          </div>
         </div>
       </details>
 

@@ -32,7 +32,21 @@ import {
   deleteAccount,
   findAccountByIdentifier,
   clearActiveAccount,
+  normalizeEmail,
+  isValidEmail,
 } from './core/accounts.js';
+import {
+  loadConfig,
+  saveConfig,
+  getCloudUser,
+  cloudSignUp,
+  cloudSignIn,
+  cloudSignOut,
+  cloudTestConfig,
+  cloudPushRecord,
+  cloudFetchRecords,
+  MIN_CLOUD_PASS,
+} from './core/supabase.js';
 import { sampleGhost, ghostYAt, saveGhostFor, loadGhostFor } from './game/ghost.js';
 import { applyThemeToSections, getThemeName, setThemeName } from './game/themes.js';
 import { getArchetype, applyArchetypePalette } from './game/archetypes.js';
@@ -830,6 +844,8 @@ function finalizeRun(finished) {
     finished,
   });
   saveStats(stats);
+  // Nuvem: envia o recorde da música pro Supabase (fire-and-forget, sem travar o jogo).
+  if (getCloudUser()) cloudPushRecord(key, stats[key]).catch(() => {});
   if (records.progress && progress >= 5 && ghostRec.length > 4) {
     saveGhostFor(key, ghostRec);
   }
@@ -923,11 +939,14 @@ function hideAccountLogin() {
 function refreshAccountUI() {
   const accounts = listAccounts();
   const active = getActiveAccount();
+  const cloud = getCloudUser(); // sessão de nuvem tem prioridade no chip
   // Chip no topo da home: mostra quem está logado (ou convida a criar).
   if (acct.chip) {
-    acct.chipAvatar.textContent = active?.avatar || '👤';
-    acct.chipName.textContent = active ? active.name : 'Criar conta — recordes por jogador';
-    acct.chipAction.textContent = accounts.length > 1 ? 'Trocar' : '';
+    acct.chipAvatar.textContent = cloud?.avatar || active?.avatar || '👤';
+    acct.chipName.textContent = cloud
+      ? `${cloud.name} · nuvem ☁️`
+      : active ? active.name : 'Criar conta — recordes por jogador';
+    acct.chipAction.textContent = cloud ? '' : accounts.length > 1 ? 'Trocar' : '';
   }
   if (acct.active) {
     acct.active.textContent = active
@@ -1098,6 +1117,33 @@ welcome.tabLogin?.addEventListener('click', () => {
 welcome.create?.addEventListener('submit', async (e) => {
   e.preventDefault();
   welcome.createErr.textContent = '';
+  if (loadConfig()) {
+    // ☁️ Nuvem (Supabase): conta por email no banco online
+    const name = welcome.name.value.trim();
+    if (name.length < 2) {
+      welcome.createErr.textContent = 'Preencha o usuário (2–16 letras).';
+      return;
+    }
+    const res = await cloudSignUp({
+      name,
+      email: welcome.email.value.trim(),
+      password: welcome.pass.value,
+      avatar: welcomeSelectedAvatar,
+    });
+    if (res.error) {
+      welcome.createErr.textContent = res.error;
+      return;
+    }
+    if (res.needsEmailConfirm) {
+      welcome.createErr.textContent = 'Conta criada! Peça pra desativar "Confirm email" no Supabase (README) ou confirme seu email.';
+      return;
+    }
+    await adoptCloudSession(res.session.user);
+    welcome.name.value = welcome.email.value = welcome.pass.value = '';
+    refreshStorageHint();
+    welcomeToHome();
+    return;
+  }
   try {
     await createAccount({
       name: welcome.name.value,
@@ -1116,7 +1162,22 @@ welcome.create?.addEventListener('submit', async (e) => {
 welcome.login?.addEventListener('submit', async (e) => {
   e.preventDefault();
   welcome.loginErr.textContent = '';
-  const acc = findAccountByIdentifier(welcome.loginId.value);
+  const rawId = welcome.loginId.value;
+  const id = normalizeEmail(rawId);
+  if (loadConfig() && isValidEmail(id)) {
+    // ☁️ Nuvem (Supabase): login por email
+    const res = await cloudSignIn(id, welcome.loginPass.value);
+    if (res.error) {
+      welcome.loginErr.textContent = res.error;
+      return;
+    }
+    await adoptCloudSession(res.session.user);
+    welcome.loginId.value = welcome.loginPass.value = '';
+    refreshSupabaseUI();
+    welcomeToHome();
+    return;
+  }
+  const acc = findAccountByIdentifier(rawId);
   if (!acc) {
     welcome.loginErr.textContent = 'Não achei essa conta — confere usuário/email.';
     return;
@@ -1143,6 +1204,85 @@ setStatsScope(getActiveAccount()?.id || null);
 refreshAccountUI();
 renderLobbyAvatarGrid();
 renderWelcomeAvatarGrid();
+refreshSupabaseUI();
+
+// ---------- Supabase (banco de dados na nuvem) ----------
+
+const sb = {
+  url: app.querySelector('#sb-url'),
+  key: app.querySelector('#sb-key'),
+  connect: app.querySelector('#sb-connect'),
+  status: app.querySelector('#sb-status'),
+  loggedRow: app.querySelector('#sb-logged-row'),
+  loggedLabel: app.querySelector('#sb-logged-label'),
+  logout: app.querySelector('#sb-logout'),
+  storageHint: app.querySelector('#welcome-storage-hint'),
+};
+
+/** Escopo local por usuário de nuvem (recordes separados por jogador também). */
+const cloudScopeId = (user) => `cloud-${user.id}`;
+
+function refreshStorageHint() {
+  if (!sb.storageHint) return;
+  sb.storageHint.textContent = loadConfig()
+    ? '☁️ Nuvem ligada (Supabase): sua conta e seus recordes ficam no banco online.'
+    : '💾 Conta salva neste aparelho. (Ligue o Supabase nos Ajustes do jogo pra guardar na nuvem.)';
+}
+
+function refreshSupabaseUI() {
+  const cfg = loadConfig();
+  const user = getCloudUser();
+  if (sb.url && !sb.url.value && cfg) sb.url.value = cfg.url;
+  if (sb.status && cfg && !sb.status.textContent) sb.status.textContent = '✅ Supabase conectado.';
+  if (sb.loggedRow) {
+    sb.loggedRow.classList.toggle('hidden', !user);
+    if (user && sb.loggedLabel) sb.loggedLabel.textContent = `Logado na nuvem como ${user.avatar} ${user.name} (${user.email})`;
+  }
+  refreshStorageHint();
+}
+
+/** Garante os recordes da nuvem fundidos no escopo local do usuário recém-logado. */
+async function adoptCloudSession(user) {
+  setStatsScope(cloudScopeId(user));
+  const local = loadStats();
+  const rows = await cloudFetchRecords();
+  const merged = { ...local };
+  for (const r of rows) {
+    const e = merged[r.trackKey] || {};
+    merged[r.trackKey] = {
+      ...e,
+      bestScore: Math.max(e.bestScore || 0, r.bestScore),
+      bestCombo: Math.max(e.bestCombo || 0, r.bestCombo),
+      bestProgressPct: Math.max(e.bestProgressPct || 0, r.bestProgressPct),
+      plays: Math.max(e.plays || 0, r.plays),
+      finishes: Math.max(e.finishes || 0, r.finishes),
+      lastPlayedAt: e.lastPlayedAt || Date.now(),
+    };
+  }
+  saveStats(merged);
+}
+
+sb.connect?.addEventListener('click', async () => {
+  try {
+    const cfg = saveConfig(sb.url.value, sb.key.value);
+    sb.status.textContent = 'Testando conexão…';
+    const result = await cloudTestConfig(cfg);
+    sb.status.textContent = result.ok
+      ? '✅ Supabase conectado — contas e recordes vão pra nuvem!'
+      : `⚠️ ${result.error}`;
+  } catch (err) {
+    sb.status.textContent = `⚠️ ${err?.message || 'Configuração inválida.'}`;
+  }
+  refreshSupabaseUI();
+});
+
+sb.logout?.addEventListener('click', async () => {
+  await cloudSignOut();
+  setStatsScope(getActiveAccount()?.id || null);
+  refreshAccountUI();
+  renderRecords();
+  refreshSupabaseUI();
+});
 
 // ---------- Calibração de latência ----------
 
