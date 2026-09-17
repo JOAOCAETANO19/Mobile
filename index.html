@@ -15,11 +15,49 @@
     rel="stylesheet"
   />
   <title>Rhythm Dash</title>
-  <script type="module" crossorigin src="./assets/index-DPkZSM4z.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-B7_H2myJ.css">
+  <script type="module" crossorigin src="./assets/index-DIY7rFy4.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-CfVh1NF5.css">
 </head>
 <body>
   <div id="app">
+    <section id="screen-welcome" class="screen hidden">
+      <header class="hero hero-compact">
+        <div class="brand-badge" aria-hidden="true">
+          <span class="brand-eq"><i></i><i></i><i></i><i></i></span>
+        </div>
+        <h1>RHYTHM <span class="accent">DASH</span></h1>
+        <p class="hero-sub">Crie sua conta pra guardar seus recordes e desafiar a turma. Leva 30 segundos.</p>
+      </header>
+
+      <div class="panel welcome-card">
+        <div class="welcome-tabs" role="tablist">
+          <button id="welcome-tab-create" class="welcome-tab active" type="button" role="tab">Criar conta</button>
+          <button id="welcome-tab-login" class="welcome-tab" type="button" role="tab">Entrar</button>
+        </div>
+
+        <form id="welcome-create" class="welcome-form" autocomplete="off">
+          <input id="welcome-name" type="text" maxlength="16" placeholder="Usuário (2–16 letras)" autocomplete="off" />
+          <input id="welcome-email" type="email" maxlength="64" placeholder="Seu email" autocomplete="off" />
+          <input id="welcome-pass" type="password" maxlength="16" placeholder="Senha (mínimo 4)" autocomplete="new-password" />
+          <p class="hint">Escolha seu avatar:</p>
+          <div id="welcome-avatars" class="avatar-grid" role="radiogroup" aria-label="Avatar da conta"></div>
+          <button type="submit" class="btn-primary btn-big">✨ Criar conta e jogar</button>
+          <p id="welcome-create-err" class="account-err hint"></p>
+        </form>
+
+        <form id="welcome-login" class="welcome-form hidden" autocomplete="off">
+          <input id="welcome-login-id" type="text" maxlength="64" placeholder="Usuário ou email" autocomplete="off" />
+          <input id="welcome-login-pass" type="password" maxlength="16" placeholder="Senha" autocomplete="off" />
+          <button type="submit" class="btn-primary btn-big">🎮 Entrar e jogar</button>
+          <p id="welcome-login-err" class="account-err hint"></p>
+        </form>
+
+        <button id="welcome-guest" class="welcome-guest" type="button">Continuar sem conta — jogar direto ➜</button>
+      </div>
+
+      <footer class="home-footer">A música vira a fase · roda offline no seu aparelho</footer>
+    </section>
+
     <section id="screen-home" class="screen">
       <header class="hero">
         <div class="brand-badge" aria-hidden="true">
@@ -116,6 +154,9 @@
             <div class="backend-row">
               <input id="account-name" type="text" maxlength="16" placeholder="usuário (2–16 letras)" autocomplete="off" />
               <input id="account-pass" type="password" maxlength="16" placeholder="senha (opcional, 4+)" autocomplete="new-password" />
+            </div>
+            <div class="backend-row">
+              <input id="account-email" type="email" maxlength="64" placeholder="email (opcional)" autocomplete="off" />
             </div>
             <p class="hint">Escolha seu avatar:</p>
             <div id="account-avatars" class="avatar-grid" role="radiogroup" aria-label="Avatar da conta"></div>
