@@ -15,8 +15,8 @@
     rel="stylesheet"
   />
   <title>Rhythm Dash</title>
-  <script type="module" crossorigin src="./assets/index-Bz9709OD.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-DOG7ExLG.css">
+  <script type="module" crossorigin src="./assets/index-DkH7cntf.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BHSK--86.css">
 </head>
 <body>
   <div id="app">
@@ -24,72 +24,167 @@
       <div class="welcome-bg" aria-hidden="true">
         <span class="wglow wglow-a"></span>
         <span class="wglow wglow-b"></span>
+        <span class="wgrid"></span>
       </div>
 
-      <div class="welcome-card">
-          <div class="welcome-logo">
-            <div class="brand-badge" aria-hidden="true">
-              <span class="brand-eq"><i></i><i></i><i></i><i></i></span>
+      <div class="welcome-shell">
+        <div class="welcome-side">
+          <div class="welcome-card">
+            <button id="welcome-back" class="welcome-back hidden" type="button">← Voltar</button>
+
+            <div class="welcome-logo-row">
+              <div class="welcome-logo">
+                <div class="brand-badge" aria-hidden="true">
+                  <span class="brand-eq"><i></i><i></i><i></i><i></i></span>
+                </div>
+              </div>
+              <div class="welcome-branding">
+                <p class="welcome-overline">Plataforma musical</p>
+                <h1 class="welcome-title">RHYTHM <span class="accent">DASH</span></h1>
+                <p class="welcome-sub" id="welcome-subtitle">Crie sua conta para começar a jogar com um visual profissional, rápido e sem complicação.</p>
+              </div>
+            </div>
+
+            <div class="welcome-tabs" role="tablist" aria-label="Acesso da conta">
+              <button id="welcome-tab-create" class="welcome-tab active" type="button" role="tab">Criar conta</button>
+              <button id="welcome-tab-login" class="welcome-tab" type="button" role="tab">Entrar</button>
+            </div>
+
+            <form id="welcome-create" class="welcome-form" autocomplete="off">
+              <label class="wfield">
+                <span class="wicon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="8" r="4"></circle></svg>
+                </span>
+                <input id="welcome-name" type="text" maxlength="16" placeholder="Nome de usuário" autocomplete="off" />
+              </label>
+              <label class="wfield">
+                <span class="wicon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"></rect><path d="m5 7 7 6 7-6"></path></svg>
+                </span>
+                <input id="welcome-email" type="email" maxlength="64" placeholder="E-mail" autocomplete="off" />
+              </label>
+              <label class="wfield">
+                <span class="wicon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 1 1 8 0v3"></path></svg>
+                </span>
+                <input id="welcome-pass" type="password" maxlength="16" placeholder="Senha" autocomplete="new-password" />
+                <button type="button" class="weye" id="welcome-eye-create" aria-label="Mostrar senha"><span>Mostrar</span></button>
+              </label>
+              <div class="pass-strength">
+                <span class="ps-label">Força da senha</span>
+                <span id="welcome-strength" class="ps-bar"><i></i><i></i><i></i><i></i></span>
+                <span id="welcome-strength-label" class="ps-word"></span>
+              </div>
+              <label class="terms-row">
+                <input id="welcome-terms" type="checkbox" />
+                <span>Eu aceito os Termos de Uso e a Política de Privacidade</span>
+              </label>
+              <button type="submit" class="btn-primary btn-grad wsubmit">Criar minha conta</button>
+              <p id="welcome-create-err" class="account-err hint"></p>
+            </form>
+
+            <form id="welcome-login" class="welcome-form hidden" autocomplete="off">
+              <label class="wfield">
+                <span class="wicon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="8" r="4"></circle></svg>
+                </span>
+                <input id="welcome-login-id" type="text" maxlength="64" placeholder="Usuário ou email" autocomplete="off" />
+              </label>
+              <label class="wfield">
+                <span class="wicon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 1 1 8 0v3"></path></svg>
+                </span>
+                <input id="welcome-login-pass" type="password" maxlength="16" placeholder="Senha" autocomplete="off" />
+                <button type="button" class="weye" id="welcome-eye-login" aria-label="Mostrar senha"><span>Mostrar</span></button>
+              </label>
+              <button type="submit" class="btn-primary btn-grad wsubmit">Entrar na conta</button>
+              <p id="welcome-login-err" class="account-err hint"></p>
+            </form>
+
+            <div class="wdivider"><span></span><em>ou continue com</em><span></span></div>
+            <div class="social-buttons">
+              <button type="button" class="sbtn" data-provider="Google" title="Entrar com Google"><b>G</b><span>Google</span></button>
+              <button type="button" class="sbtn" data-provider="Discord" title="Entrar com Discord"><b>D</b><span>Discord</span></button>
+              <button type="button" class="sbtn" data-provider="Twitch" title="Entrar com Twitch"><b>T</b><span>Twitch</span></button>
+            </div>
+            <p id="welcome-storage-hint" class="hint welcome-hint"></p>
+
+            <button id="welcome-guest" class="welcome-guest" type="button">Continuar sem conta</button>
+          </div>
+        </div>
+
+        <aside class="welcome-showcase" aria-hidden="true">
+          <div class="showcase-orb orb-a"></div>
+          <div class="showcase-orb orb-b"></div>
+          <div class="showcase-window">
+            <div class="show-topbar">
+              <span class="show-menu"></span>
+              <div class="show-wordmark">
+                <span class="brand-eq topbar-eq"><i></i><i></i><i></i><i></i></span>
+                <strong>RHYTHM <em>DASH</em></strong>
+              </div>
+              <span class="show-bell"></span>
+              <div class="show-profile">
+                <span class="show-avatar">J</span>
+                <div>
+                  <b>João</b>
+                  <span>Nível 7</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="show-hero">
+              <p>BEM-VINDO DE VOLTA</p>
+              <h2>A música.<br>O desafio.<br>Sua <em>vibe</em>.</h2>
+              <div class="show-feats">
+                <span>Mapas gerados</span>
+                <span>Offline</span>
+                <span>Sem loja</span>
+              </div>
+            </div>
+
+            <div class="show-grid">
+              <section class="show-panel">
+                <div class="show-head">
+                  <strong>Continue jogando</strong>
+                </div>
+                <div class="show-track">
+                  <div class="show-cover"></div>
+                  <div class="show-track-copy">
+                    <b>Midnight Pulse</b>
+                    <span>Synthwave Runner</span>
+                  </div>
+                </div>
+                <div class="show-progress"><i style="width:72%"></i></div>
+                <div class="show-meta"><span>72% concluído</span><span>18.420 pts</span></div>
+                <button class="show-cta" type="button">Continuar</button>
+              </section>
+
+              <section class="show-panel">
+                <div class="show-head"><strong>Desafios diários</strong></div>
+                <ul class="show-daily">
+                  <li><span>Jogue 3 músicas</span><b>2/3</b></li>
+                  <li><span>Acerte 500 notas</span><b>328/500</b></li>
+                  <li><span>Complete 1 mapa difícil</span><b>0/1</b></li>
+                </ul>
+              </section>
+            </div>
+
+            <section class="show-panel show-records">
+              <div class="show-head"><strong>Seus records</strong><span>Ver todos</span></div>
+              <div class="show-rec-row"><i></i><div><b>Neon Skyline</b><span>NOVO RECORDE</span></div><strong>92%</strong></div>
+              <div class="show-rec-row"><i></i><div><b>Echo Fever</b><small>18x combo</small></div><strong>87%</strong></div>
+              <div class="show-rec-row"><i></i><div><b>Velvet Drive</b><small>14x combo</small></div><strong>74%</strong></div>
+            </section>
+
+            <div class="show-nav">
+              <span class="active">Início</span>
+              <span>Minhas músicas</span>
+              <span>Records</span>
+              <span>Configurações</span>
             </div>
           </div>
-          <h1 class="welcome-title">RHYTHM <span class="accent">DASH</span></h1>
-          <p class="welcome-sub" id="welcome-subtitle">Crie sua conta para começar a jogar a música.</p>
-
-          <div class="welcome-tabs" role="tablist">
-            <button id="welcome-tab-create" class="welcome-tab active" type="button" role="tab">👤 Criar conta</button>
-            <button id="welcome-tab-login" class="welcome-tab" type="button" role="tab">➜ Entrar</button>
-          </div>
-
-          <form id="welcome-create" class="welcome-form" autocomplete="off">
-            <label class="wfield">
-              <span class="wicon">👤</span>
-              <input id="welcome-name" type="text" maxlength="16" placeholder="Nome de usuário" autocomplete="off" />
-            </label>
-            <label class="wfield">
-              <span class="wicon">✉️</span>
-              <input id="welcome-email" type="email" maxlength="64" placeholder="E-mail" autocomplete="off" />
-            </label>
-            <label class="wfield">
-              <span class="wicon">🔒</span>
-              <input id="welcome-pass" type="password" maxlength="16" placeholder="Senha" autocomplete="new-password" />
-              <button type="button" class="weye" id="welcome-eye-create" aria-label="Mostrar senha">🙈</button>
-            </label>
-            <div class="pass-strength">
-              <span class="ps-label">Força da senha:</span>
-              <span id="welcome-strength" class="ps-bar"><i></i><i></i><i></i><i></i></span>
-              <span id="welcome-strength-label" class="ps-word"></span>
-            </div>
-            <label class="terms-row">
-              <input id="welcome-terms" type="checkbox" />
-              <span>Eu aceito os Termos de Uso e a Política de Privacidade</span>
-            </label>
-            <button type="submit" class="btn-primary btn-grad wsubmit">Criar minha conta</button>
-            <p id="welcome-create-err" class="account-err hint"></p>
-          </form>
-
-          <form id="welcome-login" class="welcome-form hidden" autocomplete="off">
-            <label class="wfield">
-              <span class="wicon">👤</span>
-              <input id="welcome-login-id" type="text" maxlength="64" placeholder="Usuário ou email" autocomplete="off" />
-            </label>
-            <label class="wfield">
-              <span class="wicon">🔒</span>
-              <input id="welcome-login-pass" type="password" maxlength="16" placeholder="Senha" autocomplete="off" />
-              <button type="button" class="weye" id="welcome-eye-login" aria-label="Mostrar senha">🙈</button>
-            </label>
-            <button type="submit" class="btn-primary btn-grad wsubmit">Entrar</button>
-            <p id="welcome-login-err" class="account-err hint"></p>
-          </form>
-
-          <div class="wdivider"><span></span><em>ou continue com</em><span></span></div>
-          <div class="social-buttons">
-            <button type="button" class="sbtn" data-provider="Google" title="Entrar com Google">G</button>
-            <button type="button" class="sbtn" data-provider="Discord" title="Entrar com Discord">🎧</button>
-            <button type="button" class="sbtn" data-provider="Twitch" title="Entrar com Twitch">📺</button>
-          </div>
-          <p id="welcome-storage-hint" class="hint welcome-hint"></p>
-
-          <button id="welcome-guest" class="welcome-guest" type="button">Continuar sem conta — jogar direto ➜</button>
+        </aside>
       </div>
     </section>
 
