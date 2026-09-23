@@ -5,6 +5,7 @@ export class Screens {
   constructor(root) {
     this.root = root;
     this.els = {
+      welcome: root.querySelector('#screen-welcome'),
       home: root.querySelector('#screen-home'),
       loading: root.querySelector('#screen-loading'),
       game: root.querySelector('#screen-game'),
@@ -121,16 +122,75 @@ export class Screens {
     `;
   }
 
-  finishOverlayHtml({ score, bestCombo }) {
+  finishOverlayHtml({ score, bestCombo, record = false }) {
     return `
       <div class="overlay-card">
         <h2>🏁 Música concluída!</h2>
+        ${record ? '<p class="record-line">🏆 Novo recorde nessa música!</p>' : ''}
         <p>Pontuação final: <strong>${score}</strong> · Melhor combo: <strong>${bestCombo}x</strong></p>
         <div class="overlay-actions">
           <button id="btn-play-again">Jogar de novo</button>
           <button id="btn-quit" class="secondary">Voltar ao menu</button>
         </div>
       </div>
+    `;
+  }
+
+  /** Resultado da calibração de latência (ou falha por poucos toques válidos). */
+  calibrateResultHtml({ offsetMs, used, total }) {
+    const ok = used > 0;
+    return `
+      <div class="overlay-card">
+        <h2>${ok ? '🎧 Latência calibrada!' : '🎧 Quase lá!'}</h2>
+        <p>${
+          ok
+            ? `Atraso medido: <strong>${offsetMs} ms</strong> (${used}/${total} toques válidos) — já está valendo nos julgamentos!`
+            : `Não consegui medir (${used}/${total} toques válidos). Tente de novo seguindo os bipes.`
+        }</p>
+        <div class="overlay-actions">
+          <button id="btn-cal-close">${ok ? 'Fechar' : 'Tentar de novo depois'}</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /** Modo Turma: tela "passe o celular" entre um jogador e o próximo. */
+  turmaHandoffHtml({ name, position, total }) {
+    return `
+      <div class="overlay-card">
+        <h2>📲 Passe o celular!</h2>
+        <p>Vez de <strong class="turma-name">${escapeHtml(name)}</strong>
+          <span class="turma-pos">(jogador ${position}/${total})</span></p>
+        <div class="overlay-actions">
+          <button id="btn-turma-play">▶ Começar a vez de ${escapeHtml(name)}</button>
+          <button id="btn-turma-end" class="secondary">Encerrar turma</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /** Modo Turma: pódio final com o ranking da rodada. */
+  turmaPodiumHtml(rowsHtml) {
+    return `
+      <div class="overlay-card">
+        <h2>🏫 Placar da Turma</h2>
+        <ol class="turma-podium">${rowsHtml}</ol>
+        <div class="overlay-actions">
+          <button id="btn-turma-rematch">🔁 Revanche (mesma turma)</button>
+          <button id="btn-turma-done" class="secondary">Voltar ao menu</button>
+        </div>
+      </div>
+    `;
+  }
+
+  /** Uma linha do pódio da turma (medalha + nome + números). */
+  turmaPodiumRowHtml({ medal, name, score, bestCombo, progressPct, finished }) {
+    return `
+      <li>
+        <span class="turma-medal">${medal}</span>
+        <span class="turma-name">${escapeHtml(name)}</span>
+        <span class="turma-stats">${finished ? '🏁 ' : ''}${Math.round(progressPct)}% · ${score} pts · ${bestCombo}x</span>
+      </li>
     `;
   }
 }

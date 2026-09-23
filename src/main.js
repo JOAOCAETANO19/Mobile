@@ -18,6 +18,48 @@ import { Countdown } from './game/countdown.js';
 import { Renderer } from './game/renderer.js';
 import { sfx, vibrate } from './game/fx.js';
 import { createDemoTrackBuffer, DEMO_TRACK_META } from './demo/demotrack.js';
+import { initRotateOverlay, lockLandscape, unlockLandscape } from './core/orientation.js';
+import { emptyTurma, normalizePlayerName, restartRound, sortTurmaResults, medalFor } from './game/turma.js';
+import { getAudioOffsetMs, setAudioOffsetMs, averageOffset, matchTapsToTicks } from './core/latency.js';
+import { trackKey, loadStats, saveStats, applyRunToStats, topPlayed, setStatsScope } from './game/stats.js';
+import {
+  loadDaily,
+  saveDaily,
+  applyRunToDaily,
+  tasksWithProgress,
+  loadXp,
+  addXp,
+  levelForXp,
+  xpIntoLevel,
+} from './game/daily.js';
+import {
+  AVATARS,
+  listAccounts,
+  getActiveAccount,
+  createAccount,
+  verifyAccountPassword,
+  switchAccount,
+  deleteAccount,
+  findAccountByIdentifier,
+  clearActiveAccount,
+  normalizeEmail,
+  isValidEmail,
+} from './core/accounts.js';
+import {
+  loadConfig,
+  saveConfig,
+  getCloudUser,
+  cloudSignUp,
+  cloudSignIn,
+  cloudSignOut,
+  cloudTestConfig,
+  cloudPushRecord,
+  cloudFetchRecords,
+  MIN_CLOUD_PASS,
+} from './core/supabase.js';
+import { sampleGhost, ghostYAt, saveGhostFor, loadGhostFor } from './game/ghost.js';
+import { applyThemeToSections, getThemeName, setThemeName } from './game/themes.js';
+import { getArchetype, applyArchetypePalette } from './game/archetypes.js';
 
 const app = document.querySelector('#app');
 const screens = new Screens(app);
@@ -29,7 +71,9 @@ let player = null;
 let level = null;
 let rafId = null;
 let judgeState = { text: '', alpha: 0 };
+let runNotesHit = 0; // acertos da partida (PERFECT+GOOD), alimenta o desafio diário
 let milestoneState = { text: '', alpha: 0 };
+let pendingMoodBanner = null; // banner do arquétipo (exibido no início da fase)
 let lastFrameTime = performance.now();
 
 // Contagem regressiva 3-2-1 antes de iniciar/retomar (cenário congelado no ponto de partida).
@@ -37,6 +81,37 @@ let countdownActive = false;
 let countdown = null;
 let pendingStartTime = 0;
 let loopRunning = false; // garante UMA única cadeia de requestAnimationFrame
+
+// Badge da música + replay da morte + modo turma.
+let currentTrackMeta = null; // {title, artist, duration} da faixa em jogo
+let lastGameBuffers = null; // {audioBuffer, level} — "jogar a mesma música" (turma)
+let deathCam = null; // {killerId, t, elapsed, checkpoint} — congela e marca o assassino
+  let latestProgressPct = 0; // maior progresso da tentativa (para o placar da turma)
+let turmaRunRecorded = false; // evita registrar a mesma tentativa duas vezes
+let runStatsSaved = false; // garante 1 registro de recorde por partida
+let ghostRec = []; // amostras [t, y] da corrida atual (para o fantasma)
+let ghostBest = null; // fantasma carregado da melhor corrida DESTA música
+let deferredInstallPrompt = null; // evento beforeinstallprompt guardado
+let calibration = null; // calibração de latência em andamento
+
+/** Estado da turma salvo no aparelho (sobrevive a refresh). */
+function loadTurma() {
+  try {
+    const raw = localStorage.getItem('rhythm-dash-turma');
+    if (raw) return { ...emptyTurma(), ...JSON.parse(raw) };
+  } catch {
+    /* sem localStorage (modo privado etc.) — turma fica só em memória */
+  }
+  return emptyTurma();
+}
+function saveTurma() {
+  try {
+    localStorage.setItem('rhythm-dash-turma', JSON.stringify(turma));
+  } catch {
+    /* noop */
+  }
+}
+let turma = loadTurma();
 
 /** Posição de tela do centro do cubo (para partículas de efeito). */
 function playerScreenPos() {
@@ -213,6 +288,7 @@ async function startGameFromDemo() {
 }
 
 async function runAnalysisAndStart(audioBuffer, trackMeta) {
+  currentTrackMeta = trackMeta; // usado no badge da música durante o jogo
   screens.setLoadingText('Detectando batidas e BPM…');
   screens.setLoadingProgress(0.75);
   // Cede o frame para o navegador pintar a barra de progresso antes do trabalho pesado.
@@ -221,6 +297,20 @@ async function runAnalysisAndStart(audioBuffer, trackMeta) {
   const analysis = analyzeAudioBuffer(audioBuffer);
   screens.setLoadingProgress(0.9);
   level = generateLevel(analysis, trackMeta);
+  // Arquétipo musical: a "personalidade" detectada da música (Fúria/Glitch/Noturno/Luna)
+  // afinou o gerador e define o clima visual da fase.
+  const arch = getArchetype(analysis);
+  level = { ...level, archetype: arch }; // renderFrame usa os visuais do arquétipo
+  screens.setLoadingText(`${arch.emoji} Estilo detectado: ${arch.label}!`);
+  // Paleta: tema escolhido manualmente tem prioridade; em 'auto', as cores da
+  // própria música (via centroide), já refinada pelo arquétipo.
+  const theme = getThemeName();
+  if (theme !== 'auto') {
+    level = { ...level, sections: applyThemeToSections(level.sections, theme) };
+  } else {
+    level = { ...level, sections: applyArchetypePalette(level.sections, arch.key) };
+  }
+  pendingMoodBanner = `${arch.emoji} ${arch.label.toUpperCase()} — ${arch.desc}`;
   screens.setLoadingProgress(1);
 
   startGame(audioBuffer, level);
@@ -230,12 +320,39 @@ async function runAnalysisAndStart(audioBuffer, trackMeta) {
 
 function startGame(audioBuffer, lvl) {
   screens.show('game');
+  // Modo paisagem: tenta travar a orientação (fire-and-forget; o overlay
+  // "Gire o celular" cobre os navegadores sem suporte ao lock, ex.: iOS).
+  lockLandscape();
+
+  // Estado por partida: badge da música, replay da morte, turma, recordes e fantasma.
+  lastGameBuffers = { audioBuffer, lvl };
+  deathCam = null;
+  // Banner do arquétipo musical detectado (aparece no primeiro quadro, some sozinho).
+  if (pendingMoodBanner) {
+    milestoneState = { text: pendingMoodBanner, alpha: 1.8 };
+    pendingMoodBanner = null;
+  }
+  latestProgressPct = 0;
+  turmaRunRecorded = false;
+  runStatsSaved = false;
+  runNotesHit = 0; // zera acertos da partida (desafio diário)
+  ghostRec = [];
+  ghostBest = currentTrackMeta ? loadGhostFor(trackKey(currentTrackMeta)) : null;
+  const badge = app.querySelector('#song-badge');
+  if (badge && currentTrackMeta) {
+    const title = currentTrackMeta.title || 'Música';
+    const artist = currentTrackMeta.artist ? ` — ${currentTrackMeta.artist}` : '';
+    badge.textContent = `🎵 ${title}${artist}`;
+    badge.classList.remove('hidden');
+  }
+
   const canvas = app.querySelector('#game-canvas');
   renderer = new Renderer(canvas);
   player = new SyncedPlayer(audioBuffer);
 
   engine = new GameEngine(lvl, {
     onJudge: (judge, combo) => {
+      if (judge !== 'MISS') runNotesHit += 1;
       judgeState = { text: judge === 'PERFECT' ? 'PERFEITO!' : 'BOM', alpha: 1 };
       if (judge === 'PERFECT') { sfx.perfect(); vibrate(15); } else { sfx.good(); }
     },
@@ -280,8 +397,9 @@ function startGame(audioBuffer, lvl) {
       engine.particles.spawn(p.x, p.y, 34, { speed: 260, life: 0.8, color: '#ff5d8f', size: 4.5 });
       engine.particles.spawn(p.x, p.y, 18, { speed: 180, life: 0.7, color: '#ffffff', size: 3 });
       player.stop();
-      screens.showOverlay(screens.deathOverlayHtml(checkpoint, { score: engine.score, bestCombo: engine.bestCombo }));
-      wireDeathOverlay(checkpoint);
+      // Replay da morte: ~1s de cena congelada com o obstáculo assassino marcado;
+      // o overlay de morte só aparece quando o tempinho acaba (no loop).
+      deathCam = { killerId: engine.lastKiller?.id ?? null, t: 0.95, elapsed: 0, checkpoint };
     },
     onSectionChange: () => {},
     onFinish: () => {
@@ -290,10 +408,25 @@ function startGame(audioBuffer, lvl) {
       engine.particles.spawn(renderer.widthCss * 0.3, p.y - renderer.cellPx, 20, { speed: 220, life: 0.8, color: '#4dffea', size: 4 });
       engine.particles.spawn(renderer.widthCss * 0.6, p.y - renderer.cellPx * 1.4, 20, { speed: 220, life: 0.8, color: '#ffd166', size: 4 });
       engine.particles.spawn(renderer.widthCss * 0.8, p.y - renderer.cellPx, 20, { speed: 220, life: 0.8, color: '#ff5d8f', size: 4 });
-      screens.showOverlay(screens.finishOverlayHtml({ score: engine.score, bestCombo: engine.bestCombo }));
-      wireFinishOverlay();
+      const recs = finalizeRun(true); // recordes locais + salva fantasma se foi a melhor
+      if (turma.active) {
+        // Modo Turma: registra 100% para o jogador da vez e já chama o próximo (ou o pódio).
+        recordTurmaResult(100, true);
+        showTurmaAfterRun();
+      } else {
+        screens.showOverlay(screens.finishOverlayHtml({
+          score: engine.score,
+          bestCombo: engine.bestCombo,
+          record: !!(recs && (recs.score || recs.combo || recs.progress)),
+        }));
+        wireFinishOverlay();
+      }
     },
   }, currentMode);
+
+  // Compensação de latência do áudio (calibrada nas configurações): os julgamentos
+  // PERFEITO/BOM passam a comparar o toque com o que o jogador realmente ouviu.
+  engine.audioOffsetSec = getAudioOffsetMs() / 1000;
 
   window.addEventListener('resize', () => renderer?.resize());
   canvas.addEventListener('pointerdown', onTap);
@@ -406,13 +539,31 @@ function wireFinishOverlay() {
 }
 
 function quitToMenu() {
+  // Modo Turma: sair da partida (morte/pausa) encerra a tentativa do jogador da vez.
+  const recordedNow =
+    turma.active &&
+    engine &&
+    player &&
+    !turmaRunRecorded &&
+    !countdownActive &&
+    recordTurmaResult(Math.round(latestProgressPct), false);
+
+  finalizeRun(false); // recordes locais (melhor progresso conta mesmo sem terminar)
+
   countdownActive = false;
   countdown = null;
+  deathCam = null;
   cancelAnimationFrame(rafId);
   loopRunning = false;
   player?.stop();
+  unlockLandscape();
   screens.hideOverlay();
+  app.querySelector('#song-badge')?.classList.add('hidden');
   screens.show('home');
+  renderTurmaUI();
+
+  // Se foi uma vez de turma, já chama o próximo jogador (ou o pódio final).
+  if (recordedNow) showTurmaAfterRun();
 }
 
 function loop() {
@@ -437,7 +588,38 @@ function loop() {
   engine.update(currentTime, dt, renderer.widthCells);
   renderer.updateShake(dt);
 
+  // Grava amostras da corrida para o futuro "fantasma" da melhor tentativa.
+  if (!engine.player.dead && !engine.finished) {
+    sampleGhost(ghostRec, currentTime, engine.player.y);
+  }
+
   renderFrame(currentTime);
+
+  // Maior progresso da tentativa (placar do modo turma).
+  if (level?.durationSec && !engine.finished) {
+    latestProgressPct = Math.max(
+      latestProgressPct,
+      Math.min(100, (currentTime / level.durationSec) * 100)
+    );
+  }
+
+  // Replay da morte: marca o obstáculo assassino por ~1s antes do overlay.
+  if (deathCam) {
+    deathCam.elapsed += dt;
+    deathCam.t -= dt;
+    if (deathCam.killerId != null) {
+      const killer = engine
+        .getVisibleObstacles(currentTime, renderer.widthCells)
+        .find((o) => o.id === deathCam.killerId);
+      if (killer) renderer.drawDeathMarker(killer.screenX, deathCam.elapsed);
+    }
+    if (deathCam.t <= 0) {
+      const { checkpoint } = deathCam;
+      deathCam = null;
+      screens.showOverlay(screens.deathOverlayHtml(checkpoint, { score: engine.score, bestCombo: engine.bestCombo }));
+      wireDeathOverlay(checkpoint);
+    }
+  }
 }
 
 function renderFrame(currentTime) {
@@ -448,7 +630,14 @@ function renderFrame(currentTime) {
 
   renderer.clear();
   renderer.beginScene();
-  renderer.drawBackground(section, beatProgress, currentTime, worldX);
+  const arch = level.archetype;
+  renderer.drawBackground(
+    section,
+    beatProgress,
+    currentTime,
+    worldX,
+    arch ? { ...arch.visuals, strength: level.moodStrength } : null
+  );
   renderer.drawGround(section, beatProgress, worldX);
   renderer.drawHitLine(beatProgress, section?.glow || '#4dffea');
 
@@ -457,6 +646,11 @@ function renderFrame(currentTime) {
   }
   for (const ob of engine.getVisibleObstacles(currentTime, renderer.widthCells)) {
     renderer.drawObstacle(ob, currentTime, beatProgress);
+  }
+  // Fantasma da melhor tentativa correndo junto (mesma música, dado local).
+  if (ghostBest) {
+    const ghostY = ghostYAt(ghostBest, currentTime);
+    if (ghostY != null) renderer.drawGhost(ghostY);
   }
   renderer.drawPlayer(engine.player, engine.mode === MODE.BEAT ? beatProgress : null, {
     trail: engine.trail,
@@ -481,6 +675,1055 @@ function renderFrame(currentTime) {
   });
 }
 
+// ---------- Modo Turma (placar no mesmo celular) ----------
+
+const turmaEls = {
+  name: app.querySelector('#turma-name'),
+  add: app.querySelector('#turma-add'),
+  list: app.querySelector('#turma-list'),
+  toggle: app.querySelector('#turma-toggle'),
+  clear: app.querySelector('#turma-clear'),
+  status: app.querySelector('#turma-status'),
+};
+
+/** Registra o resultado do jogador da vez e avança para o próximo. */
+function recordTurmaResult(progressPct, finished) {
+  if (!turma.active || !turma.players.length || turma.current >= turma.players.length) return false;
+  const name = turma.players[turma.current];
+  turma.results = turma.results.filter((r) => r.name !== name); // 1 resultado por jogador por rodada
+  turma.results.push({
+    name,
+    score: engine?.score ?? 0,
+    bestCombo: engine?.bestCombo ?? 0,
+    progressPct,
+    finished,
+  });
+  turma.current += 1;
+  turmaRunRecorded = true;
+  saveTurma();
+  return true;
+}
+
+/** Após uma vez de turma: próximo jogador ("passe o celular") ou pódio final. */
+function showTurmaAfterRun() {
+  if (turma.current < turma.players.length) {
+    screens.showOverlay(
+      screens.turmaHandoffHtml({
+        name: turma.players[turma.current],
+        position: turma.current + 1,
+        total: turma.players.length,
+      })
+    );
+    app.querySelector('#btn-turma-play')?.addEventListener('click', () => {
+      screens.hideOverlay();
+      // Rejoga a MESMA música (buffers ainda em memória) para ser justo.
+      if (lastGameBuffers) startGame(lastGameBuffers.audioBuffer, lastGameBuffers.lvl);
+    });
+    app.querySelector('#btn-turma-end')?.addEventListener('click', () => {
+      // Encerrar antes da última vez: fecha a rodada com o placar parcial.
+      turma.current = turma.players.length;
+      saveTurma();
+      if (turma.results.length) {
+        showTurmaAfterRun();
+      } else {
+        turma.active = false;
+        saveTurma();
+        screens.hideOverlay();
+        renderTurmaUI();
+      }
+    });
+  } else {
+    const rowsHtml = sortTurmaResults(turma.results)
+      .map((r, i) => screens.turmaPodiumRowHtml({ medal: medalFor(i), ...r }))
+      .join('');
+    screens.showOverlay(screens.turmaPodiumHtml(rowsHtml));
+    app.querySelector('#btn-turma-rematch')?.addEventListener('click', () => {
+      turma = { ...restartRound(turma), active: true };
+      saveTurma();
+      screens.hideOverlay();
+      renderTurmaUI();
+      if (lastGameBuffers) startGame(lastGameBuffers.audioBuffer, lastGameBuffers.lvl);
+    });
+    app.querySelector('#btn-turma-done')?.addEventListener('click', () => {
+      turma.active = false;
+      turma.current = 0;
+      turma.results = [];
+      saveTurma();
+      quitToMenu(); // já registrado — a flag impede registro duplo
+    });
+  }
+}
+
+/** Atualiza lista de jogadores, botão de ativação e o status na home. */
+function renderTurmaUI() {
+  if (!turmaEls.list) return;
+  turmaEls.list.innerHTML = '';
+  turma.players.forEach((name, i) => {
+    const li = document.createElement('li');
+    if (turma.active && i === turma.current) li.classList.add('current');
+    const span = document.createElement('span');
+    span.textContent = turma.active && i === turma.current ? `▶ ${name}` : name;
+    li.appendChild(span);
+    const rm = document.createElement('button');
+    rm.textContent = '✕';
+    rm.title = `Remover ${name}`;
+    rm.setAttribute('aria-label', `Remover ${name}`);
+    rm.addEventListener('click', () => {
+      turma.players.splice(i, 1);
+      turma.results = turma.results.filter((r) => r.name !== name);
+      if (turma.current >= turma.players.length) turma.current = 0;
+      saveTurma();
+      renderTurmaUI();
+    });
+    li.appendChild(rm);
+    turmaEls.list.appendChild(li);
+  });
+  turmaEls.toggle.textContent = turma.active ? '⏸ Desativar modo turma' : '▶ Ativar modo turma';
+  let status;
+  if (!turma.players.length) status = 'Adicione os jogadores para montar a turma.';
+  else if (turma.active && turma.current < turma.players.length) {
+    status = `Turma ativa — vez de: ${turma.players[turma.current]} (${turma.current + 1}/${turma.players.length}). Escolha a música e jogue!`;
+  } else if (turma.active) status = 'Rodada completa! Ative de novo para revanche ou limpe a turma.';
+  else status = `${turma.players.length} jogador(es) na turma. Ative e escolha uma música!`;
+  turmaEls.status.textContent = status;
+}
+
+function addTurmaPlayer() {
+  const name = normalizePlayerName(turmaEls.name.value);
+  if (!name) return;
+  if (!turma.players.includes(name)) turma.players.push(name);
+  turmaEls.name.value = '';
+  saveTurma();
+  renderTurmaUI();
+}
+
+turmaEls.add?.addEventListener('click', addTurmaPlayer);
+turmaEls.name?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addTurmaPlayer();
+});
+turmaEls.toggle?.addEventListener('click', () => {
+  if (turma.active) {
+    turma.active = false;
+  } else {
+    if (!turma.players.length) {
+      turmaEls.status.textContent = 'Adicione pelo menos 1 jogador primeiro 🙂';
+      return;
+    }
+    turma.active = true;
+    turma.current = 0;
+    turma.results = [];
+  }
+  saveTurma();
+  renderTurmaUI();
+});
+turmaEls.clear?.addEventListener('click', () => {
+  turma = emptyTurma();
+  saveTurma();
+  renderTurmaUI();
+});
+
+// Se o app perde o foco no meio da música, pausa sozinho (evita dessincronia
+// entre o relógio do áudio e o jogo ao voltar).
+document.addEventListener('visibilitychange', () => {
+  if (
+    document.hidden &&
+    engine &&
+    player &&
+    !paused &&
+    !countdownActive &&
+    !engine.player.dead &&
+    !engine.finished
+  ) {
+    togglePause();
+  }
+});
+
+// ---------- Recordes locais + fantasma ----------
+
+/**
+ * Registra o resultado da partida nos recordes locais da música (1x por partida).
+ * Se foi a melhor corrida em progresso, salva também o "fantasma" (trajetória).
+ * Retorna as flags de recorde (para destacar no overlay de vitória).
+ */
+function finalizeRun(finished) {
+  if (runStatsSaved || !currentTrackMeta || !engine) return null;
+  runStatsSaved = true;
+  const key = trackKey(currentTrackMeta);
+  const progress = finished ? 100 : Math.round(latestProgressPct);
+  const { stats, records } = applyRunToStats(loadStats(), key, {
+    score: engine.score,
+    bestCombo: engine.bestCombo,
+    progressPct: progress,
+    finished,
+  });
+  saveStats(stats);
+  // Nuvem: envia o recorde da música pro Supabase (fire-and-forget, sem travar o jogo).
+  if (getCloudUser()) cloudPushRecord(key, stats[key]).catch(() => {});
+  // XP + desafios diários (notas acertadas = PERFECT+GOOD contados no julgamento).
+  const scope = currentScope();
+  const daily = loadDaily(undefined, scope);
+  const gain = applyRunToDaily({ notesHit: runNotesHit, finished }, daily);
+  saveDaily(gain.state, undefined, scope);
+  const runXp = Math.floor((engine.score || 0) / 10) + gain.xpGained;
+  addXp(runXp, undefined, scope);
+  if (gain.completedIds.length) {
+    showXpToast(`🏅 Desafio diário concluído! +${gain.xpGained} XP (total de ${runXp} XP nesta corrida)`);
+  }
+  if (records.progress && progress >= 5 && ghostRec.length > 4) {
+    saveGhostFor(key, ghostRec);
+  }
+  refreshHome();
+  return records;
+}
+
+/** Cores da mini-capa de cada música (paleta estável derivada do título). */
+const THUMB_GRADS = [
+  ['#7c3aed', '#0ea5e9'], ['#db2777', '#f97316'], ['#059669', '#84cc16'],
+  ['#dc2626', '#f59e0b'], ['#2563eb', '#a855f7'], ['#0891b2', '#22d3ee'],
+];
+function thumbFor(key) {
+  let h = 0;
+  for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const [a, b] = THUMB_GRADS[h % THUMB_GRADS.length];
+  return `linear-gradient(135deg, ${a}, ${b})`;
+}
+
+/** Seção "Seus recordes" na home — linhas no estilo da referência (capa, tag, pts, ▶). */
+function renderRecords(limit = 5) {
+  const el = app.querySelector('#home-records');
+  if (!el) return;
+  const top = topPlayed(loadStats(), limit);
+  if (!top.length) {
+    el.classList.add('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
+  el.innerHTML = '';
+  const ul = document.createElement('ul');
+  const dayAgo = Date.now() - 24 * 3600 * 1000;
+  for (const [key, s] of top) {
+    const [title, artist] = key.split('•');
+    const li = document.createElement('li');
+
+    const thumb = document.createElement('div');
+    thumb.className = 'rec-thumb';
+    thumb.style.background = thumbFor(key);
+    thumb.textContent = '🎵';
+
+    const texts = document.createElement('div');
+    texts.className = 'rec-texts';
+    const tit = document.createElement('div');
+    tit.className = 'rec-title';
+    const b = document.createElement('b');
+    b.textContent = title;
+    tit.appendChild(b);
+    if (s.lastRecordAt && s.lastRecordAt > dayAgo) {
+      const tag = document.createElement('span');
+      tag.className = 'rec-tag';
+      tag.textContent = 'NOVO RECORDE';
+      tit.appendChild(tag);
+    }
+    const sub = document.createElement('div');
+    sub.className = 'rec-sub';
+    sub.textContent = `${artist || 'Artista desconhecido'} · ${s.bestCombo}x combo${s.finishes ? ' · 🏁' : ''}`;
+    texts.append(tit, sub);
+
+    const right = document.createElement('div');
+    right.className = 'rec-right';
+    const pct = document.createElement('span');
+    pct.className = 'rec-pct';
+    pct.textContent = `${s.bestProgressPct}%`;
+    const pts = document.createElement('span');
+    pts.className = 'rec-pts';
+    pts.textContent = `${s.bestScore} pts`;
+    right.append(pct, pts);
+
+    const play = document.createElement('button');
+    play.type = 'button';
+    play.className = 'rec-play';
+    play.setAttribute('aria-label', `Tocar ${title} de novo`);
+    play.textContent = '▶';
+    play.addEventListener('click', () => {
+      const input = app.querySelector('#search-input');
+      if (input) {
+        input.value = artist ? `${title} ${artist}` : title;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        app.querySelector('#search-btn')?.click();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+
+    li.append(thumb, texts, right, play);
+    ul.appendChild(li);
+  }
+  el.appendChild(ul);
+}
+
+// ---------- Home v2: saudação, Continue jogando, Desafios diários, XP, nav ----------
+
+const home2 = {
+  greeting: app.querySelector('#home-greeting'),
+  chipLevel: app.querySelector('#account-chip-level'),
+  continueBody: app.querySelector('#continue-body'),
+  dailyList: app.querySelector('#daily-list'),
+  dailyXp: app.querySelector('#daily-xp'),
+  toast: app.querySelector('#xp-toast'),
+  navBtns: Array.from(app.querySelectorAll('.hnav')),
+  recordsSeeAll: app.querySelector('#records-see-all'),
+  menuBtn: app.querySelector('#menu-btn'),
+  notifBtn: app.querySelector('#notif-btn'),
+};
+
+/** Nome de exibição do jogador atual (nuvem tem prioridade). */
+function displayName() {
+  const cloud = getCloudUser();
+  const active = getActiveAccount();
+  return cloud?.name || active?.name || 'BeatMaster';
+}
+
+/** Escopo de XP/diário do jogador atual (nuvem > conta local > geral). */
+function currentScope() {
+  const cloud = getCloudUser();
+  if (cloud) return cloudScopeId(cloud);
+  return getActiveAccount()?.id || '';
+}
+
+function showXpToast(message) {
+  const t = home2.toast;
+  if (!t) return;
+  t.textContent = message;
+  t.classList.remove('hidden');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.add('hidden'), 3800);
+}
+
+/** Cartão "Continue jogando": o último progresso < 100% ganha botão de retomar. */
+function renderContinue() {
+  const box = home2.continueBody;
+  if (!box) return;
+  const top = topPlayed(loadStats(), 8);
+  const candidate = top.find(([, s]) => s.bestProgressPct > 0 && s.bestProgressPct < 100);
+  box.innerHTML = '';
+  if (!candidate) {
+    const p = document.createElement('p');
+    p.className = 'cont-empty';
+    p.textContent = top.length
+      ? 'Você completou todas! 🏁 Escolha uma música nova pra continuar dançando.'
+      : 'Ainda sem partidas. Cá entre nós: a demo é um ótimo começo. 👆';
+    box.appendChild(p);
+    return;
+  }
+  const [key, s] = candidate;
+  const [title, artist] = key.split('•');
+  const row = document.createElement('div');
+  row.className = 'cont-row';
+  const cover = document.createElement('div');
+  cover.className = 'cont-cover';
+  cover.style.background = thumbFor(key);
+  cover.textContent = '🎧';
+  const texts = document.createElement('div');
+  texts.className = 'cont-texts';
+  const t = document.createElement('div');
+  t.className = 'cont-title';
+  t.textContent = title;
+  const a = document.createElement('div');
+  a.className = 'cont-artist';
+  a.textContent = artist || 'Artista desconhecido';
+  texts.append(t, a);
+  row.append(cover, texts);
+
+  const track = document.createElement('div');
+  track.className = 'cont-progress-track';
+  const bar = document.createElement('div');
+  bar.className = 'cont-progress-bar';
+  bar.style.width = `${s.bestProgressPct}%`;
+  track.appendChild(bar);
+
+  const meta = document.createElement('div');
+  meta.className = 'cont-meta';
+  meta.innerHTML = `<span>Progresso</span><span>${s.bestScore} pts · ${s.bestCombo}x</span>`;
+
+  const btn = document.createElement('button');
+  btn.className = 'cont-btn';
+  btn.textContent = `Continuar · ${s.bestProgressPct}%`;
+  btn.addEventListener('click', () => {
+    const input = app.querySelector('#search-input');
+    if (!input) return;
+    input.value = artist ? `${title} ${artist}` : title;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    app.querySelector('#search-btn')?.click();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  box.append(row, track, meta, btn);
+}
+
+/** Desafios diários + nível do chip — recalcula quando muda conta ou termina partida. */
+function renderDaily() {
+  const scope = currentScope();
+  const state = loadDaily(undefined, scope);
+  const tasks = tasksWithProgress(state);
+  if (home2.dailyList) {
+    home2.dailyList.innerHTML = '';
+    for (const t of tasks) {
+      const li = document.createElement('li');
+      li.className = 'daily-item' + (t.done ? ' done' : '');
+      const check = document.createElement('span');
+      check.className = 'daily-check';
+      check.textContent = '✔';
+      const texts = document.createElement('div');
+      texts.className = 'daily-texts';
+      const label = document.createElement('div');
+      label.className = 'daily-label';
+      label.textContent = `${t.label} · +${t.xp} XP`;
+      const bar = document.createElement('div');
+      bar.className = 'daily-bar';
+      const i = document.createElement('i');
+      i.style.width = `${t.pct}%`;
+      bar.appendChild(i);
+      texts.append(label, bar);
+      const count = document.createElement('span');
+      count.className = 'daily-count';
+      count.textContent = `${Math.min(t.cur, t.target)}/${t.target}`;
+      li.append(check, texts, count);
+      home2.dailyList.appendChild(li);
+    }
+  }
+  const xp = loadXp(undefined, scope);
+  const level = levelForXp(xp);
+  if (home2.dailyXp) {
+    home2.dailyXp.innerHTML = `⚡ Nível <strong>${level}</strong> · <strong>${xpIntoLevel(xp)}</strong>/100 XP da sessão`;
+  }
+  if (home2.chipLevel) home2.chipLevel.textContent = `Nível ${level}`;
+  if (home2.greeting) {
+    home2.greeting.textContent = `BEM-VINDO DE VOLTA, ${String(displayName()).toUpperCase()}!`;
+  }
+}
+
+/** Atualiza home completa (chamada após partida, troca de conta e chegada). */
+function refreshHome() {
+  renderRecords(home2.recordsSeeAll?.dataset.all === '1' ? 20 : 5);
+  renderContinue();
+  renderDaily();
+}
+
+/** Botões da nav inferior: rolagem suave até a seção. */
+for (const btn of home2.navBtns) {
+  btn.addEventListener('click', () => {
+    home2.navBtns.forEach((b) => b.classList.toggle('active', b === btn));
+    const target = {
+      top: 0,
+      music: app.querySelector('#home-records'),
+      records: app.querySelector('#records-zone'),
+      config: app.querySelector('#supabase-section'),
+    }[btn.dataset.nav];
+    if (btn.dataset.nav === 'top' || btn.dataset.nav === 'music') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (btn.dataset.nav === 'music') app.querySelector('#search-input')?.focus({ preventScroll: true });
+    } else if (target) {
+      if (target.tagName === 'DETAILS') target.open = true;
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+}
+
+home2.recordsSeeAll?.addEventListener('click', () => {
+  const all = home2.recordsSeeAll.dataset.all === '1';
+  home2.recordsSeeAll.dataset.all = all ? '0' : '1';
+  home2.recordsSeeAll.textContent = all ? 'Ver todos' : 'Ver menos';
+  renderRecords(all ? 5 : 20);
+});
+
+home2.menuBtn?.addEventListener('click', () => {
+  const s = app.querySelector('.home-v2 .settings');
+  if (s) {
+    s.open = true;
+    s.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+});
+home2.notifBtn?.addEventListener('click', () => {
+  const scope = currentScope();
+  const tasks = tasksWithProgress(loadDaily(undefined, scope));
+  const left = tasks.filter((t) => !t.done).length;
+  showXpToast(left
+    ? `🔔 Hoje ainda faltam ${left} desafio${left > 1 ? 's' : ''} diário${left > 1 ? 's' : ''} — bora conseguir esse XP!`
+    : '🔔 Todos os desafios de hoje feitos! Volte amanhã pra mais.');
+});
+
+
+// ---------- Conta local (usuário + avatar; recordes separados por jogador) ----------
+
+const acct = {
+  chip: app.querySelector('#account-chip'),
+  chipAvatar: app.querySelector('#account-chip-avatar'),
+  chipName: app.querySelector('#account-chip-name'),
+  section: app.querySelector('#account-section'),
+  active: app.querySelector('#account-active'),
+  list: app.querySelector('#account-list'),
+  createBtn: app.querySelector('#account-create-btn'),
+  form: app.querySelector('#account-form'),
+  name: app.querySelector('#account-name'),
+  email: app.querySelector('#account-email'),
+  pass: app.querySelector('#account-pass'),
+  avatars: app.querySelector('#account-avatars'),
+  formErr: app.querySelector('#account-form-err'),
+  cancel: app.querySelector('#account-cancel'),
+  login: app.querySelector('#account-login'),
+  loginLabel: app.querySelector('#account-login-label'),
+  loginPass: app.querySelector('#account-login-pass'),
+  loginOk: app.querySelector('#account-login-ok'),
+  loginCancel: app.querySelector('#account-login-cancel'),
+  loginErr: app.querySelector('#account-login-err'),
+};
+let acctSelectedAvatar = AVATARS[0];
+let pendingLoginAccount = null; // conta esperando senha para entrar
+
+/** Grade de avatares: duas instâncias (tela de boas-vindas e formulário do lobby). */
+function renderAvatarGrid(container, selectedEmoji, onPick) {
+  if (!container) return;
+  container.innerHTML = '';
+  for (const emoji of AVATARS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'avatar-btn' + (emoji === selectedEmoji ? ' selected' : '');
+    b.textContent = emoji;
+    b.setAttribute('aria-pressed', emoji === selectedEmoji ? 'true' : 'false');
+    b.addEventListener('click', () => onPick(emoji));
+    container.appendChild(b);
+  }
+}
+
+function renderLobbyAvatarGrid() {
+  renderAvatarGrid(acct.avatars, acctSelectedAvatar, (emoji) => {
+    acctSelectedAvatar = emoji;
+    renderLobbyAvatarGrid();
+  });
+}
+
+function hideAccountLogin() {
+  pendingLoginAccount = null;
+  acct.login?.classList.add('hidden');
+  if (acct.loginErr) acct.loginErr.textContent = '';
+}
+
+function refreshAccountUI() {
+  const accounts = listAccounts();
+  const active = getActiveAccount();
+  const cloud = getCloudUser(); // sessão de nuvem tem prioridade no chip
+  // Chip no topo da home: mostra quem está logado (ou convida a criar).
+  if (acct.chip) {
+    acct.chipAvatar.textContent = cloud?.avatar || active?.avatar || '👤';
+    acct.chipName.textContent = cloud
+      ? `${cloud.name}`
+      : active ? active.name : 'Convidado';
+  }
+  renderDaily(); // nível no chip + saudação acompanham quem está logado
+  if (acct.active) {
+    acct.active.textContent = active
+      ? `Jogando como ${active.avatar} ${active.name} — os recordes ficam guardados nesta conta.`
+      : 'Nenhuma conta ativa — crie uma para guardar seus recordes separados dos outros jogadores.';
+  }
+  if (acct.list) {
+    acct.list.innerHTML = '';
+    for (const a of accounts) {
+      const li = document.createElement('div');
+      li.className = 'account-item' + (active?.id === a.id ? ' current' : '');
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'account-pick';
+      pick.textContent = `${a.avatar} ${a.name}${active?.id === a.id ? ' ✓' : ''}`;
+      pick.addEventListener('click', () => pickAccountForLogin(a));
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'account-del';
+      del.title = `Remover a conta ${a.name}`;
+      del.textContent = '✕';
+      del.addEventListener('click', () => removeAccount(a));
+      li.append(pick, del);
+      acct.list.appendChild(li);
+    }
+    acct.list.classList.toggle('hidden', accounts.length === 0);
+  }
+}
+
+/** Ativa a conta e aplica o escopo dela (recordes passam a ser os dela). */
+function activateAccount(id) {
+  const acc = switchAccount(id);
+  if (!acc) return;
+  hideAccountLogin();
+  setStatsScope(acc.id);
+  refreshAccountUI();
+  refreshHome(); // a lista "Seus recordes" mostra os da conta ativa
+  if (acct.section) acct.section.open = true;
+}
+
+function pickAccountForLogin(acc) {
+  if (!acc.passHash) {
+    activateAccount(acc.id); // sem senha: entra direto
+    return;
+  }
+  pendingLoginAccount = acc;
+  if (acct.login) {
+    acct.login.classList.remove('hidden');
+    acct.loginLabel.textContent = `Senha da conta ${acc.avatar} ${acc.name}:`;
+    acct.loginPass.value = '';
+    acct.loginErr.textContent = '';
+    acct.loginPass.focus();
+  }
+}
+
+async function submitAccountLogin() {
+  if (!pendingLoginAccount) return;
+  const ok = await verifyAccountPassword(pendingLoginAccount, acct.loginPass?.value || '');
+  if (!ok) {
+    acct.loginErr.textContent = 'Senha incorreta — tenta de novo.';
+    acct.loginPass.select();
+    return;
+  }
+  activateAccount(pendingLoginAccount.id);
+}
+
+function removeAccount(acc) {
+  deleteAccount(acc.id);
+  if (pendingLoginAccount?.id === acc.id) hideAccountLogin();
+  const active = getActiveAccount();
+  setStatsScope(active ? active.id : null); // apagou a ativa? reescopado pela função o que sobrou
+  refreshAccountUI();
+  refreshHome();
+}
+
+async function submitCreateAccount(e) {
+  e?.preventDefault();
+  acct.formErr.textContent = '';
+  try {
+    await createAccount({
+      name: acct.name.value,
+      email: acct.email?.value || '',
+      password: acct.pass.value,
+      avatar: acctSelectedAvatar,
+    });
+    acct.name.value = '';
+    if (acct.email) acct.email.value = '';
+    acct.pass.value = '';
+    acct.form.classList.add('hidden');
+    acct.createBtn?.classList.remove('hidden');
+    activateAccount(getActiveAccount().id); // recém-criada já é a ativa
+  } catch (err) {
+    acct.formErr.textContent = err?.message || 'Não deu para criar a conta.';
+  }
+}
+
+acct.chip?.addEventListener('click', () => {
+  if (!acct.section) return;
+  acct.section.open = true;
+  acct.section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+acct.createBtn?.addEventListener('click', () => {
+  openWelcome('create');
+  welcome.name?.focus();
+});
+acct.cancel?.addEventListener('click', () => {
+  acct.form.classList.add('hidden');
+  acct.createBtn.classList.remove('hidden');
+  acct.formErr.textContent = '';
+});
+acct.form?.addEventListener('submit', submitCreateAccount);
+acct.loginOk?.addEventListener('click', submitAccountLogin);
+acct.loginCancel?.addEventListener('click', hideAccountLogin);
+acct.loginPass?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    submitAccountLogin();
+  }
+});
+
+// ---------- Tela de boas-vindas (criar conta / entrar ao abrir o jogo) ----------
+
+const welcome = {
+  tabCreate: app.querySelector('#welcome-tab-create'),
+  tabLogin: app.querySelector('#welcome-tab-login'),
+  create: app.querySelector('#welcome-create'),
+  login: app.querySelector('#welcome-login'),
+  name: app.querySelector('#welcome-name'),
+  email: app.querySelector('#welcome-email'),
+  pass: app.querySelector('#welcome-pass'),
+  createErr: app.querySelector('#welcome-create-err'),
+  loginId: app.querySelector('#welcome-login-id'),
+  loginPass: app.querySelector('#welcome-login-pass'),
+  loginErr: app.querySelector('#welcome-login-err'),
+  guest: app.querySelector('#welcome-guest'),
+  back: app.querySelector('#welcome-back'),
+  terms: app.querySelector('#welcome-terms'),
+  strength: app.querySelector('#welcome-strength'),
+  strengthLabel: app.querySelector('#welcome-strength-label'),
+  eyeCreate: app.querySelector('#welcome-eye-create'),
+  eyeLogin: app.querySelector('#welcome-eye-login'),
+};
+let welcomeSelectedAvatar = AVATARS[1]; // 👾 é a cara do jogo (sem grade de avatar na tela da referência)
+
+function setWelcomeTab(mode = 'create') {
+  const isCreate = mode !== 'login';
+  welcome.tabCreate?.classList.toggle('active', isCreate);
+  welcome.tabLogin?.classList.toggle('active', !isCreate);
+  welcome.create?.classList.toggle('hidden', !isCreate);
+  welcome.login?.classList.toggle('hidden', isCreate);
+}
+
+function syncWelcomeActions() {
+  const hasSession = !!(getCloudUser() || getActiveAccount());
+  welcome.back?.classList.toggle('hidden', !hasSession);
+  if (welcome.guest) {
+    welcome.guest.textContent = hasSession
+      ? 'Voltar para o início'
+      : 'Continuar sem conta';
+  }
+}
+
+function openWelcome(mode = 'create') {
+  setWelcomeTab(mode);
+  syncWelcomeActions();
+  screens.show('welcome');
+}
+
+// 👁 Mostrar/ocultar senha nos dois formulários.
+for (const [eyeBtn, input] of [[welcome.eyeCreate, welcome.pass], [welcome.eyeLogin, welcome.loginPass]]) {
+  eyeBtn?.addEventListener('click', () => {
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    eyeBtn.classList.toggle('is-open', show);
+    eyeBtn.querySelector('span').textContent = show ? 'Ocultar' : 'Mostrar';
+    eyeBtn.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+  });
+}
+
+// Medidor de força da senha (0 = fraca … 4 = forte).
+const STRENGTH_WORDS = ['fraquinha', 'ok', 'boa', 'forte!', 'imbatível 🔥'];
+welcome.pass?.addEventListener('input', () => {
+  const v = welcome.pass.value;
+  let level = 0;
+  if (v.length >= 4) level += 1;
+  if (v.length >= 8) level += 1;
+  if (/[0-9]/.test(v) && /[a-zA-ZÀ-ÿ]/.test(v) && v.length >= 6) level += 1;
+  if (/[^0-9a-zA-ZÀ-ÿ]/.test(v) && v.length >= 8) level += 1;
+  welcome.strength.dataset.level = String(level || (v ? 1 : 0));
+  welcome.strengthLabel.textContent = v ? STRENGTH_WORDS[level] : '';
+});
+
+// Botões sociais: só decorativos por enquanto (sem OAuth) — feedback amigável.
+for (const sbtn of app.querySelectorAll('.sbtn')) {
+  sbtn.addEventListener('click', () => {
+    const provider = sbtn.dataset.provider || 'Google';
+    welcome.createErr.textContent = `Login com ${provider} chega em breve — por enquanto, crie sua conta com email! ✨`;
+    welcome.loginErr.textContent = '';
+  });
+}
+
+function welcomeToHome() {
+  refreshAccountUI();
+  refreshHome();
+  screens.show('home');
+}
+
+welcome.tabCreate?.addEventListener('click', () => setWelcomeTab('create'));
+welcome.tabLogin?.addEventListener('click', () => setWelcomeTab('login'));
+welcome.back?.addEventListener('click', () => welcomeToHome());
+
+welcome.create?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  welcome.createErr.textContent = '';
+  if (welcome.terms && !welcome.terms.checked) {
+    welcome.createErr.textContent = 'Você precisa aceitar os Termos de Uso pra criar a conta. 👍';
+    return;
+  }
+  if (loadConfig()) {
+    // ☁️ Nuvem (Supabase): conta por email no banco online
+    const name = welcome.name.value.trim();
+    if (name.length < 2) {
+      welcome.createErr.textContent = 'Preencha o usuário (2–16 letras).';
+      return;
+    }
+    const res = await cloudSignUp({
+      name,
+      email: welcome.email.value.trim(),
+      password: welcome.pass.value,
+      avatar: welcomeSelectedAvatar,
+    });
+    if (res.error) {
+      welcome.createErr.textContent = res.error;
+      return;
+    }
+    if (res.needsEmailConfirm) {
+      welcome.createErr.textContent = 'Conta criada! Peça pra desativar "Confirm email" no Supabase (README) ou confirme seu email.';
+      return;
+    }
+    await adoptCloudSession(res.session.user);
+    welcome.name.value = welcome.email.value = welcome.pass.value = '';
+    refreshStorageHint();
+    welcomeToHome();
+    return;
+  }
+  try {
+    await createAccount({
+      name: welcome.name.value,
+      email: welcome.email.value,
+      password: welcome.pass.value,
+      avatar: welcomeSelectedAvatar,
+    });
+    setStatsScope(getActiveAccount().id);
+    welcome.name.value = welcome.email.value = welcome.pass.value = '';
+    welcomeToHome();
+  } catch (err) {
+    welcome.createErr.textContent = err?.message || 'Não deu para criar a conta.';
+  }
+});
+
+welcome.login?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  welcome.loginErr.textContent = '';
+  const rawId = welcome.loginId.value;
+  const id = normalizeEmail(rawId);
+  if (loadConfig() && isValidEmail(id)) {
+    // ☁️ Nuvem (Supabase): login por email
+    const res = await cloudSignIn(id, welcome.loginPass.value);
+    if (res.error) {
+      welcome.loginErr.textContent = res.error;
+      return;
+    }
+    await adoptCloudSession(res.session.user);
+    welcome.loginId.value = welcome.loginPass.value = '';
+    refreshSupabaseUI();
+    welcomeToHome();
+    return;
+  }
+  const acc = findAccountByIdentifier(rawId);
+  if (!acc) {
+    welcome.loginErr.textContent = 'Não achei essa conta — confere usuário/email.';
+    return;
+  }
+  if (!(await verifyAccountPassword(acc, welcome.loginPass.value))) {
+    welcome.loginErr.textContent = 'Senha incorreta — tenta de novo.';
+    welcome.loginPass.select();
+    return;
+  }
+  switchAccount(acc.id);
+  setStatsScope(acc.id);
+  welcome.loginId.value = welcome.loginPass.value = '';
+  welcomeToHome();
+});
+
+welcome.guest?.addEventListener('click', () => {
+  if (getCloudUser() || getActiveAccount()) {
+    welcomeToHome();
+    return;
+  }
+  clearActiveAccount(); // “Continuar sem conta”: ninguém ativo
+  setStatsScope(null);
+  welcomeToHome();
+});
+
+// Aplica a conta já ativa (sessão anterior) e pinta a UI na chegada.
+const bootCloudUser = getCloudUser();
+setStatsScope(bootCloudUser ? `cloud-${bootCloudUser.id}` : getActiveAccount()?.id || null);
+refreshAccountUI();
+renderLobbyAvatarGrid();
+refreshSupabaseUI();
+
+// ---------- Supabase (banco de dados na nuvem) ----------
+
+const sb = {
+  url: app.querySelector('#sb-url'),
+  key: app.querySelector('#sb-key'),
+  connect: app.querySelector('#sb-connect'),
+  status: app.querySelector('#sb-status'),
+  loggedRow: app.querySelector('#sb-logged-row'),
+  loggedLabel: app.querySelector('#sb-logged-label'),
+  logout: app.querySelector('#sb-logout'),
+  storageHint: app.querySelector('#welcome-storage-hint'),
+};
+
+/** Escopo local por usuário de nuvem (recordes separados por jogador também). */
+const cloudScopeId = (user) => `cloud-${user.id}`;
+
+function refreshStorageHint() {
+  if (!sb.storageHint) return;
+  sb.storageHint.textContent = loadConfig()
+    ? '☁️ Nuvem ligada (Supabase): sua conta e seus recordes ficam no banco online.'
+    : '💾 Conta salva neste aparelho. (Ligue o Supabase nos Ajustes do jogo pra guardar na nuvem.)';
+}
+
+function refreshSupabaseUI() {
+  const cfg = loadConfig();
+  const user = getCloudUser();
+  if (sb.url && !sb.url.value && cfg) sb.url.value = cfg.url;
+  if (sb.key && !sb.key.value && cfg) sb.key.value = cfg.key;
+  if (sb.status && cfg && !sb.status.textContent) {
+    sb.status.textContent = '✅ Conectado ao banco na nuvem (automático).';
+  }
+  if (sb.loggedRow) {
+    sb.loggedRow.classList.toggle('hidden', !user);
+    if (user && sb.loggedLabel) sb.loggedLabel.textContent = `Logado na nuvem como ${user.avatar} ${user.name} (${user.email})`;
+  }
+  refreshStorageHint();
+}
+
+/** Garante os recordes da nuvem fundidos no escopo local do usuário recém-logado. */
+async function adoptCloudSession(user) {
+  setStatsScope(cloudScopeId(user));
+  const local = loadStats();
+  const rows = await cloudFetchRecords();
+  const merged = { ...local };
+  for (const r of rows) {
+    const e = merged[r.trackKey] || {};
+    merged[r.trackKey] = {
+      ...e,
+      bestScore: Math.max(e.bestScore || 0, r.bestScore),
+      bestCombo: Math.max(e.bestCombo || 0, r.bestCombo),
+      bestProgressPct: Math.max(e.bestProgressPct || 0, r.bestProgressPct),
+      plays: Math.max(e.plays || 0, r.plays),
+      finishes: Math.max(e.finishes || 0, r.finishes),
+      lastPlayedAt: e.lastPlayedAt || Date.now(),
+    };
+  }
+  saveStats(merged);
+}
+
+sb.connect?.addEventListener('click', async () => {
+  try {
+    const cfg = saveConfig(sb.url.value, sb.key.value);
+    sb.status.textContent = 'Testando conexão…';
+    const result = await cloudTestConfig(cfg);
+    sb.status.textContent = result.ok
+      ? '✅ Supabase conectado — contas e recordes vão pra nuvem!'
+      : `⚠️ ${result.error}`;
+  } catch (err) {
+    sb.status.textContent = `⚠️ ${err?.message || 'Configuração inválida.'}`;
+  }
+  refreshSupabaseUI();
+});
+
+sb.logout?.addEventListener('click', async () => {
+  await cloudSignOut();
+  setStatsScope(getActiveAccount()?.id || null);
+  refreshAccountUI();
+  refreshHome();
+  refreshSupabaseUI();
+});
+
+// ---------- Calibração de latência ----------
+
+const latencyValueEl = app.querySelector('#latency-value');
+function refreshLatencyLabel() {
+  if (latencyValueEl) latencyValueEl.textContent = `${getAudioOffsetMs()} ms`;
+}
+
+function startLatencyCalibration() {
+  if (calibration) return;
+  const ctx = getAudioContext();
+  ctx.resume?.();
+
+  const N = 8;
+  const interval = 0.6; // 100 BPM
+  const startAt = ctx.currentTime + 0.8;
+  const tickTimes = [];
+  const tapTimes = [];
+
+  // Agenda os bipes (o 1º mais agudo, como referência de "começou").
+  const master = ctx.createGain();
+  master.gain.value = 0.25;
+  master.connect(ctx.destination);
+  for (let i = 0; i < N; i++) {
+    const t = startAt + i * interval;
+    tickTimes.push(t);
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.frequency.value = i === 0 ? 1400 : 1000;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.8, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+    osc.connect(g);
+    g.connect(master);
+    osc.start(t);
+    osc.stop(t + 0.1);
+  }
+
+  screens.showOverlay(`
+    <div class="overlay-card calibration">
+      <h2>🎧 Calibrar latência</h2>
+      <p>Toque em qualquer lugar NO RITMO dos ${N} bipes…</p>
+      <div class="cal-count"><span id="cal-count">0</span>/${N}</div>
+      <button id="btn-cal-cancel" class="secondary">Cancelar</button>
+    </div>`);
+
+  const overlayEl = app.querySelector('#overlay');
+  const onTap = () => {
+    if (!calibration) return;
+    const tNow = ctx.currentTime;
+    if (tNow < startAt - 0.45 || tNow > startAt + (N - 1) * interval + 0.4) return;
+    tapTimes.push(tNow);
+    const c = app.querySelector('#cal-count');
+    if (c) c.textContent = String(tapTimes.length);
+    sfx.jump(); // feedback imediato do toque registrado
+  };
+  overlayEl.addEventListener('pointerdown', onTap);
+
+  const msUntilFinish = (startAt + (N - 1) * interval + 0.6 - ctx.currentTime) * 1000;
+  const finishTimer = setTimeout(finish, msUntilFinish);
+
+  function cleanup() {
+    calibration = null;
+    clearTimeout(finishTimer);
+    overlayEl.removeEventListener('pointerdown', onTap);
+    try { master.disconnect(); } catch { /* noop */ }
+  }
+  function finish() {
+    const offsets = matchTapsToTicks(tapTimes, tickTimes);
+    const avg = averageOffset(offsets);
+    const saved = offsets.length ? setAudioOffsetMs(avg) : getAudioOffsetMs();
+    cleanup();
+    screens.showOverlay(screens.calibrateResultHtml({ offsetMs: saved, used: offsets.length, total: N }));
+    app.querySelector('#btn-cal-close')?.addEventListener('click', () => screens.hideOverlay());
+    refreshLatencyLabel();
+  }
+  calibration = {
+    cancel: () => { cleanup(); screens.hideOverlay(); },
+  };
+
+  app.querySelector('#btn-cal-cancel')?.addEventListener('click', () => calibration?.cancel());
+}
+
+app.querySelector('#calibrate-btn')?.addEventListener('click', startLatencyCalibration);
+
+// ---------- Botão "Instalar app" (PWA) ----------
+
+const installBtn = app.querySelector('#install-btn');
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  installBtn?.classList.remove('hidden');
+});
+installBtn?.addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  try {
+    await deferredInstallPrompt.userChoice;
+  } catch {
+    /* escolha cancelada/indisponível */
+  }
+  deferredInstallPrompt = null;
+  installBtn?.classList.add('hidden');
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  installBtn?.classList.add('hidden');
+});
+
+// ---------- Tema visual ----------
+
+const themeSelect = app.querySelector('#theme-select');
+if (themeSelect) {
+  themeSelect.value = getThemeName();
+  themeSelect.addEventListener('change', () => setThemeName(themeSelect.value));
+}
+
 // ---------- PWA ----------
 
 if ('serviceWorker' in navigator) {
@@ -489,4 +1732,15 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-screens.show('home');
+// Overlay "Gire o celular": cobre a tela em aparelho touch em pé (retrato).
+initRotateOverlay(app.querySelector('#rotate-overlay'));
+
+renderTurmaUI();
+refreshHome();
+refreshLatencyLabel();
+// Conta ativa de uma sessão anterior? Já entra direto; se não, dá boas-vindas primeiro.
+if (getCloudUser() || getActiveAccount()) {
+  screens.show('home');
+} else {
+  openWelcome('create');
+}
