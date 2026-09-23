@@ -1936,6 +1936,367 @@ html, body {
   .home-actions.panel { margin-top: 8px; padding: 12px; }
 }
 
+
+/* ---------- Ajustes mobile-first: nada cortado em celulares ---------- */
+html, body, #app, .screen { max-width: 100%; overflow-x: hidden; }
+
+.welcome-screen {
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(14px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom))
+    max(14px, env(safe-area-inset-left));
+}
+.home-v2 {
+  padding:
+    0 16px
+    calc(100px + env(safe-area-inset-bottom)) !important;
+}
+.home-nav {
+  width: min(100%, 560px);
+  max-width: calc(100vw - 24px);
+  justify-content: space-between;
+}
+.hnav {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.hnav span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.xp-toast {
+  width: max-content;
+  max-width: calc(100vw - 28px);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .home-v2 {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .topbar {
+    gap: 8px;
+    padding: 12px 0 8px;
+  }
+  .topbar-logo {
+    min-width: 0;
+    gap: 7px;
+  }
+  .topbar-logo strong {
+    min-width: 0;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.84rem;
+  }
+  .topbar-right {
+    gap: 8px;
+    min-width: 0;
+  }
+  .profile-chip {
+    min-width: 0;
+    max-width: 156px;
+    padding: 5px 10px 5px 6px;
+  }
+  .chip-name {
+    max-width: 74px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .chip-level { font-size: 0.64rem; }
+  .home-hero {
+    padding: 18px 0 14px;
+  }
+  .hero-title {
+    font-size: clamp(1.9rem, 8.5vw, 2.45rem);
+  }
+  .hero-sub {
+    font-size: 0.92rem;
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+  .hero-feats {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .feat {
+    min-width: 0;
+    justify-content: flex-start;
+    font-size: 0.78rem;
+  }
+  .home-v2 .panel,
+  .settings {
+    border-radius: 18px;
+  }
+  .home-v2 .panel {
+    padding: 16px;
+  }
+  .home-v2 .search-box {
+    flex-direction: column;
+  }
+  .home-v2 .btn-primary,
+  .search-box .btn-primary {
+    width: 100%;
+    min-height: 48px;
+  }
+  .quick-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .quick-actions .file-btn,
+  .quick-actions .secondary {
+    width: 100%;
+  }
+  .backend-row {
+    flex-direction: column;
+  }
+  .backend-row > * {
+    width: 100%;
+  }
+  .cont-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+}
+
+@media (max-width: 560px) {
+  .welcome-shell {
+    width: 100%;
+  }
+  .welcome-card {
+    padding: 20px 16px 16px;
+    border-radius: 24px;
+  }
+  .welcome-back {
+    top: 14px;
+    right: 14px;
+    padding: 7px 10px;
+    font-size: 0.78rem;
+  }
+  .welcome-logo-row {
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .welcome-logo .brand-badge {
+    width: 62px;
+    height: 62px;
+    border-radius: 20px;
+  }
+  .welcome-overline {
+    font-size: 0.68rem;
+    letter-spacing: 0.18em;
+  }
+  .welcome-title {
+    font-size: clamp(1.7rem, 10vw, 2.15rem);
+  }
+  .welcome-sub {
+    font-size: 0.9rem;
+    line-height: 1.48;
+  }
+  .welcome-tabs {
+    gap: 8px;
+    padding: 5px;
+    border-radius: 16px;
+  }
+  .welcome-tab {
+    padding: 11px 8px;
+    font-size: 0.9rem;
+  }
+  .wfield {
+    min-height: 54px;
+    padding: 0 12px;
+    gap: 10px;
+    border-radius: 16px;
+  }
+  .wfield input {
+    height: 52px;
+    font-size: 0.92rem;
+  }
+  .weye {
+    min-width: 64px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 0.76rem;
+  }
+  .pass-strength {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+  .social-buttons {
+    grid-template-columns: 1fr;
+  }
+  .sbtn {
+    justify-content: flex-start;
+    min-height: 50px;
+    font-size: 0.82rem;
+  }
+  .welcome-guest,
+  .wsubmit {
+    min-height: 50px;
+  }
+
+  .topbar {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .topbar-right {
+    gap: 6px;
+  }
+  .icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+  }
+  #notif-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 0.95rem;
+  }
+  .profile-chip {
+    max-width: 132px;
+    padding-right: 8px;
+  }
+  .chip-avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 0.9rem;
+  }
+  .profile-texts {
+    min-width: 0;
+  }
+  .chip-name {
+    max-width: 56px;
+    font-size: 0.78rem;
+  }
+  .chip-level {
+    font-size: 0.6rem;
+  }
+  .hero-kicker {
+    font-size: 0.68rem;
+    letter-spacing: 0.16em;
+  }
+  .hero-title {
+    font-size: clamp(1.72rem, 9vw, 2.18rem);
+    line-height: 1.06;
+  }
+  .panel-head {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .panel-head h2,
+  .side-card h3 {
+    font-size: 0.98rem;
+  }
+  .records li {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+  }
+  .rec-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+  }
+  .rec-title {
+    white-space: normal;
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .rec-sub {
+    white-space: normal;
+    line-height: 1.35;
+  }
+  .rec-right {
+    align-items: flex-start;
+    justify-self: end;
+  }
+  .rec-play {
+    width: 32px;
+    height: 32px;
+  }
+  .daily-item {
+    align-items: flex-start;
+  }
+  .daily-count {
+    padding-top: 2px;
+  }
+  .settings {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .home-nav {
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    width: auto;
+    max-width: none;
+    transform: none;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    padding: 6px;
+    gap: 2px;
+  }
+  .hnav {
+    padding: 7px 4px;
+    font-size: 0.92rem;
+  }
+  .hnav span {
+    font-size: 0.54rem;
+    letter-spacing: 0;
+  }
+  .xp-toast {
+    bottom: calc(74px + env(safe-area-inset-bottom));
+    padding: 10px 14px;
+    font-size: 0.82rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .welcome-screen {
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+  .welcome-card {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .wfield {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .topbar-logo strong {
+    font-size: 0.76rem;
+  }
+  .profile-chip {
+    max-width: 118px;
+  }
+  .chip-name {
+    max-width: 48px;
+  }
+  .home-v2 .panel {
+    padding: 14px;
+  }
+  .feat {
+    font-size: 0.74rem;
+    padding: 8px 11px;
+  }
+  .hnav {
+    font-size: 0.84rem;
+    padding: 7px 2px;
+  }
+  .hnav span {
+    font-size: 0.49rem;
+  }
+}
+
 /* Acessibilidade: sem animações para quem pede movimento reduzido. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
