@@ -15,8 +15,8 @@
     rel="stylesheet"
   />
   <title>Rhythm Dash</title>
-  <script type="module" crossorigin src="./assets/index-te0Ksuoh.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-DlYQXTg5.css">
+  <script type="module" crossorigin src="./assets/index-GosfPzt_.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-yihq9OEK.css">
 </head>
 <body>
   <div id="app">
@@ -260,19 +260,25 @@
       </div>
 
 
-      <details class="settings">
-        <summary>Ajustes do jogo</summary>
+      <details class="settings settings-card" id="game-settings-section">
+        <summary>
+          <span class="settings-icon" aria-hidden="true">🎛️</span>
+          <span class="settings-copy">
+            <strong>Ajustes do jogo</strong>
+            <small>Modo, visual, backend e calibração</small>
+          </span>
+        </summary>
         <div class="settings-body">
-          <label>
-            Modo de jogo:
+          <label class="settings-field">
+            <span class="field-label">Modo de jogo</span>
             <select id="mode-select">
               <option value="beat">Modo Batida (recomendado)</option>
               <option value="free">Modo Livre</option>
             </select>
           </label>
 
-          <label>
-            Tema visual:
+          <label class="settings-field">
+            <span class="field-label">Tema visual</span>
             <select id="theme-select">
               <option value="auto">Automático (cores da própria música)</option>
               <option value="neon">Neon</option>
@@ -283,32 +289,44 @@
             </select>
           </label>
 
-          <p class="hint">
-            Backend próprio (yt-dlp) — músicas completas de qualquer fonte. Requer HTTPS se o
-            app estiver rodando em https (veja o README para túnel/deploy).
-          </p>
+          <div class="info-note">
+            <p class="hint">
+              Backend próprio (yt-dlp) — músicas completas de qualquer fonte. Requer HTTPS se o
+              app estiver rodando em https (veja o README para túnel/deploy).
+            </p>
+          </div>
           <div class="backend-row">
             <input id="backend-url" type="text" placeholder="https://seu-servidor.exemplo.com" />
             <input id="backend-key" type="text" placeholder="chave (opcional)" />
             <button id="backend-test-btn">Testar</button>
           </div>
           <p id="backend-status" class="hint"></p>
-          <p class="hint">
-            Latência do áudio — fones Bluetooth atrasam o som e atrapalham o ritmo.
-            Toque no ritmo dos bipes para calibrar. Atual: <strong id="latency-value">0 ms</strong>
-            <button id="calibrate-btn" class="secondary">Calibrar latência</button>
-          </p>
+          <div class="info-note compact-note">
+            <p class="hint">
+              Latência do áudio — fones Bluetooth atrasam o som e atrapalham o ritmo.
+              Toque no ritmo dos bipes para calibrar. Atual: <strong id="latency-value">0 ms</strong>
+            </p>
+            <button id="calibrate-btn" class="secondary settings-action">Calibrar latência</button>
+          </div>
         </div>
       </details>
 
-      <details class="settings" id="supabase-section">
-        <summary>Banco de dados — Supabase (nuvem) ☁️</summary>
+      <details class="settings settings-card" id="supabase-section">
+        <summary>
+          <span class="settings-icon" aria-hidden="true">☁️</span>
+          <span class="settings-copy">
+            <strong>Banco de dados — Supabase</strong>
+            <small>Sincronize contas e recordes na nuvem</small>
+          </span>
+        </summary>
         <div class="settings-body">
-          <p class="hint">
+          <div class="info-note">
+            <p class="hint">
             Liga o banco de dados online: contas por email + recordes salvos na nuvem.
             No seu projeto Supabase, vá em <strong>Settings → API</strong> e copie a
             <strong>Project URL</strong> e a <strong>anon public key</strong> (guia completo no README).
-          </p>
+            </p>
+          </div>
           <div class="backend-row">
             <input id="sb-url" type="url" placeholder="https://SEU-PROJETO.supabase.co" autocomplete="off" />
           </div>
@@ -324,13 +342,19 @@
         </div>
       </details>
 
-      <details class="settings" id="account-section">
-        <summary>Sua conta — recordes por jogador</summary>
+      <details class="settings settings-card" id="account-section">
+        <summary>
+          <span class="settings-icon" aria-hidden="true">👤</span>
+          <span class="settings-copy">
+            <strong>Sua conta</strong>
+            <small>Perfis locais com recordes separados</small>
+          </span>
+        </summary>
         <div class="settings-body">
-          <p id="account-active" class="hint"></p>
+          <p id="account-active" class="hint account-banner"></p>
           <div id="account-list" class="account-list"></div>
 
-          <div id="account-login" class="hidden">
+          <div id="account-login" class="hidden auth-block">
             <p class="hint" id="account-login-label"></p>
             <div class="backend-row">
               <input id="account-login-pass" type="password" maxlength="16" placeholder="senha" autocomplete="off" />
@@ -340,7 +364,7 @@
             <p id="account-login-err" class="account-err hint"></p>
           </div>
 
-          <form id="account-form" class="account-form hidden" autocomplete="off">
+          <form id="account-form" class="account-form hidden auth-block" autocomplete="off">
             <div class="backend-row">
               <input id="account-name" type="text" maxlength="16" placeholder="usuário (2–16 letras)" autocomplete="off" />
               <input id="account-pass" type="password" maxlength="16" placeholder="senha (opcional, 4+)" autocomplete="new-password" />
@@ -348,7 +372,7 @@
             <div class="backend-row">
               <input id="account-email" type="email" maxlength="64" placeholder="email (opcional)" autocomplete="off" />
             </div>
-            <p class="hint">Escolha seu avatar:</p>
+            <p class="hint field-label avatar-label">Escolha seu avatar</p>
             <div id="account-avatars" class="avatar-grid" role="radiogroup" aria-label="Avatar da conta"></div>
             <div class="backend-row">
               <button type="submit" class="btn-primary">Criar conta</button>
@@ -357,19 +381,27 @@
             <p id="account-form-err" class="account-err hint"></p>
           </form>
 
-          <div class="backend-row">
-            <button id="account-create-btn" type="button">➕ Criar conta</button>
+          <div class="backend-row account-actions-row">
+            <button id="account-create-btn" type="button">Criar nova conta</button>
           </div>
-          <p class="hint">A conta fica salva só neste aparelho. Cada jogador tem os próprios recordes.</p>
+          <p class="hint account-footnote">A conta fica salva só neste aparelho. Cada jogador tem os próprios recordes.</p>
         </div>
       </details>
 
-      <details class="settings" id="turma-section">
-        <summary>Modo Turma — placar no mesmo celular</summary>
+      <details class="settings settings-card" id="turma-section">
+        <summary>
+          <span class="settings-icon" aria-hidden="true">🏁</span>
+          <span class="settings-copy">
+            <strong>Modo Turma</strong>
+            <small>Ranking local para jogar em grupo</small>
+          </span>
+        </summary>
         <div class="settings-body">
-          <p class="hint">
-            Cada jogador toca a mesma música, um de cada vez — no final, o ranking com pódio.
-          </p>
+          <div class="info-note">
+            <p class="hint">
+              Cada jogador toca a mesma música, um de cada vez — no final, o ranking com pódio.
+            </p>
+          </div>
           <div class="backend-row">
             <input id="turma-name" type="text" placeholder="Nome do jogador" maxlength="16" />
             <button id="turma-add">Adicionar</button>
