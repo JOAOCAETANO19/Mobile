@@ -2,9 +2,9 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <meta name="theme-color" content="#07030f" />
-  <meta name="description" content="Rhythm Dash — jogo estilo Geometry Dash onde a música gera o mapa." />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#11111d" />
+  <meta name="description" content="Rhythm Dash — transforme sua música em um desafio no ritmo." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -15,416 +15,206 @@
     rel="stylesheet"
   />
   <title>Rhythm Dash</title>
-  <script type="module" crossorigin src="./assets/index-8EtWboPc.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-Bak91Z6X.css">
+  <script type="module" crossorigin src="./assets/index-DmL1VCPG.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-MInu7cfJ.css">
 </head>
 <body>
   <div id="app">
-    <section id="screen-welcome" class="screen welcome-screen">
-      <div class="welcome-bg" aria-hidden="true">
-        <span class="wglow wglow-a"></span>
-        <span class="wglow wglow-b"></span>
-        <span class="wgrid"></span>
-      </div>
+    <section id="screen-home" class="screen home-screen">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="Rhythm Dash, início">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="brand-name">rhythm<span>dash</span></span>
+        </a>
 
-      <div class="welcome-shell">
-        <div class="welcome-side">
-          <div class="welcome-side-glow" aria-hidden="true"></div>
-          <div class="welcome-card">
-            <button id="welcome-back" class="welcome-back hidden" type="button">← Voltar</button>
-
-            <div class="welcome-head">
-              <div class="welcome-logo">
-                <div class="brand-badge" aria-hidden="true">
-                  <span class="brand-eq"><i></i><i></i><i></i><i></i></span>
-                </div>
-              </div>
-              <p class="welcome-overline">Acesso à sua conta</p>
-              <h1 class="welcome-title">RHYTHM <span class="accent">DASH</span></h1>
-              <p class="welcome-sub" id="welcome-subtitle">Crie sua conta para salvar seus records, progresso e desafios diários em um perfil só seu.</p>
-            </div>
-
-            <div class="welcome-tabs" role="tablist" aria-label="Acesso da conta">
-              <button id="welcome-tab-create" class="welcome-tab active" type="button" role="tab">Criar conta</button>
-              <button id="welcome-tab-login" class="welcome-tab" type="button" role="tab">Entrar</button>
-            </div>
-
-            <form id="welcome-create" class="welcome-form" autocomplete="off">
-              <label class="wfield">
-                <span class="wicon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="8" r="4"></circle></svg>
-                </span>
-                <input id="welcome-name" type="text" maxlength="16" placeholder="Nome de usuário" autocomplete="off" />
-              </label>
-              <label class="wfield">
-                <span class="wicon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"></rect><path d="m5 7 7 6 7-6"></path></svg>
-                </span>
-                <input id="welcome-email" type="email" maxlength="64" placeholder="E-mail" autocomplete="off" />
-              </label>
-              <label class="wfield">
-                <span class="wicon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 1 1 8 0v3"></path></svg>
-                </span>
-                <input id="welcome-pass" type="password" maxlength="16" placeholder="Senha" autocomplete="new-password" />
-                <button type="button" class="weye" id="welcome-eye-create" aria-label="Mostrar senha"><span>Mostrar</span></button>
-              </label>
-              <div class="pass-strength">
-                <span class="ps-label">Força da senha</span>
-                <span id="welcome-strength" class="ps-bar"><i></i><i></i><i></i><i></i></span>
-                <span id="welcome-strength-label" class="ps-word"></span>
-              </div>
-              <label class="terms-row">
-                <input id="welcome-terms" type="checkbox" />
-                <span>Eu aceito os Termos de Uso e a Política de Privacidade</span>
-              </label>
-              <button type="submit" class="btn-primary btn-grad wsubmit">Criar minha conta</button>
-              <p id="welcome-create-err" class="account-err hint"></p>
-            </form>
-
-            <form id="welcome-login" class="welcome-form hidden" autocomplete="off">
-              <label class="wfield">
-                <span class="wicon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"></path><circle cx="12" cy="8" r="4"></circle></svg>
-                </span>
-                <input id="welcome-login-id" type="text" maxlength="64" placeholder="Usuário ou email" autocomplete="off" />
-              </label>
-              <label class="wfield">
-                <span class="wicon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 1 1 8 0v3"></path></svg>
-                </span>
-                <input id="welcome-login-pass" type="password" maxlength="16" placeholder="Senha" autocomplete="off" />
-                <button type="button" class="weye" id="welcome-eye-login" aria-label="Mostrar senha"><span>Mostrar</span></button>
-              </label>
-              <button type="submit" class="btn-primary btn-grad wsubmit">Entrar na conta</button>
-              <p id="welcome-login-err" class="account-err hint"></p>
-            </form>
-
-            <div class="wdivider"><span></span><em>ou continue com</em><span></span></div>
-            <p class="welcome-mini-copy">Google, Discord e Twitch entram em breve.</p>
-            <div class="social-buttons">
-              <button type="button" class="sbtn" data-provider="Google" title="Entrar com Google"><b>G</b><span>Google</span></button>
-              <button type="button" class="sbtn" data-provider="Discord" title="Entrar com Discord"><b>D</b><span>Discord</span></button>
-              <button type="button" class="sbtn" data-provider="Twitch" title="Entrar com Twitch"><b>T</b><span>Twitch</span></button>
-            </div>
-            <p id="welcome-storage-hint" class="hint welcome-hint"></p>
-
-            <button id="welcome-guest" class="welcome-guest" type="button">Continuar sem conta</button>
-            <p class="welcome-footnote">Conta local neste aparelho ou nuvem com Supabase, se estiver ativado.</p>
+        <section class="account-area" aria-label="Conta e recordes">
+          <div class="account-bar">
+            <p id="account-summary" class="sr-only" role="status" aria-live="polite">Entre para salvar seus recordes na nuvem.</p>
+            <button id="account-toggle" class="account-toggle" type="button" aria-expanded="false" aria-controls="account-panel">
+              👤 Entrar
+            </button>
           </div>
-        </div>
-
-        <aside class="welcome-showcase" aria-hidden="true">
-          <div class="showcase-orb orb-a"></div>
-          <div class="showcase-orb orb-b"></div>
-          <div class="showcase-window">
-            <div class="show-topbar">
-              <span class="show-menu"></span>
-              <div class="show-wordmark">
-                <span class="brand-eq topbar-eq"><i></i><i></i><i></i><i></i></span>
-                <strong>RHYTHM <em>DASH</em></strong>
-              </div>
-              <span class="show-bell"></span>
-              <div class="show-profile">
-                <span class="show-avatar">J</span>
+          <div id="account-panel" class="auth-panel hidden">
+            <div id="auth-signed-out">
+              <div class="auth-heading">
+                <span class="auth-heading-mark" aria-hidden="true">♪</span>
                 <div>
-                  <b>João</b>
-                  <span>Nível 7</span>
+                  <p class="auth-eyebrow">RHYTHM DASH ID</p>
+                  <h2 id="auth-title">Entre na sua conta</h2>
                 </div>
               </div>
-            </div>
-
-            <div class="show-hero">
-              <p>BEM-VINDO DE VOLTA</p>
-              <h2>A música.<br>O desafio.<br>Sua <em>vibe</em>.</h2>
-              <div class="show-feats">
-                <span>Mapas gerados</span>
-                <span>Offline</span>
-                <span>Sem loja</span>
-              </div>
-            </div>
-
-            <div class="show-grid">
-              <section class="show-panel">
-                <div class="show-head">
-                  <strong>Continue jogando</strong>
+              <p id="auth-description" class="hint auth-description">Salve seus recordes e continue jogando em outro aparelho.</p>
+              <form id="auth-form" novalidate>
+                <div class="auth-field">
+                  <label for="auth-email">E-mail</label>
+                  <input id="auth-email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" required placeholder="voce@exemplo.com" />
                 </div>
-                <div class="show-track">
-                  <div class="show-cover"></div>
-                  <div class="show-track-copy">
-                    <b>Midnight Pulse</b>
-                    <span>Synthwave Runner</span>
+                <div class="auth-field">
+                  <div class="auth-field-heading">
+                    <label for="auth-password">Senha</label>
+                    <button class="auth-password-toggle" type="button" data-password-target="auth-password" aria-label="Mostrar senha" aria-pressed="false">Mostrar</button>
+                  </div>
+                  <div class="auth-input-wrap">
+                    <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="8" required placeholder="Sua senha" />
                   </div>
                 </div>
-                <div class="show-progress"><i style="width:72%"></i></div>
-                <div class="show-meta"><span>72% concluído</span><span>18.420 pts</span></div>
-                <button class="show-cta" type="button">Continuar</button>
-              </section>
+                <div id="auth-confirm-wrap" class="auth-field hidden">
+                  <div class="auth-field-heading">
+                    <label for="auth-confirm-password">Confirme a senha</label>
+                    <button class="auth-password-toggle" type="button" data-password-target="auth-confirm-password" aria-label="Mostrar confirmação da senha" aria-pressed="false">Mostrar</button>
+                  </div>
+                  <div class="auth-input-wrap">
+                    <input id="auth-confirm-password" name="confirm-password" type="password" autocomplete="new-password" minlength="8" />
+                  </div>
+                </div>
+                <p id="auth-password-help" class="auth-password-help hidden">Use pelo menos 8 caracteres. Uma senha única ajuda a proteger seus recordes.</p>
+                <div class="auth-actions">
+                  <button id="auth-submit" type="submit">Entrar</button>
+                  <button id="auth-mode-toggle" class="secondary" type="button">Criar conta</button>
+                </div>
+              </form>
+              <p id="auth-note" class="hint auth-note">Ainda não tem conta? Crie uma para manter seus recordes sincronizados.</p>
 
-              <section class="show-panel">
-                <div class="show-head"><strong>Desafios diários</strong></div>
-                <ul class="show-daily">
-                  <li><span>Jogue 3 músicas</span><b>2/3</b></li>
-                  <li><span>Acerte 500 notas</span><b>328/500</b></li>
-                  <li><span>Complete 1 mapa difícil</span><b>0/1</b></li>
-                </ul>
+              <section id="auth-confirmation" class="auth-confirmation hidden" aria-labelledby="auth-confirmation-heading">
+                <div class="auth-confirm-icon" aria-hidden="true">✉</div>
+                <h3 id="auth-confirmation-heading">Confirme seu e-mail</h3>
+                <p>Enviamos um link de confirmação para <strong id="auth-confirmation-email"></strong>.</p>
+                <p class="auth-confirm-hint">Abra o link para ativar a conta. Se não encontrar a mensagem, confira o spam.</p>
+                <div class="auth-actions auth-confirm-actions">
+                  <button id="auth-resend" type="button">Reenviar link</button>
+                </div>
+                <div class="auth-confirm-links">
+                  <button id="auth-change-email" type="button">Trocar e-mail</button>
+                  <button id="auth-confirm-login" type="button">Voltar para entrar</button>
+                </div>
               </section>
             </div>
-
-            <section class="show-panel show-records">
-              <div class="show-head"><strong>Seus records</strong><span>Ver todos</span></div>
-              <div class="show-rec-row"><i></i><div><b>Neon Skyline</b><span>NOVO RECORDE</span></div><strong>92%</strong></div>
-              <div class="show-rec-row"><i></i><div><b>Echo Fever</b><small>18x combo</small></div><strong>87%</strong></div>
-              <div class="show-rec-row"><i></i><div><b>Velvet Drive</b><small>14x combo</small></div><strong>74%</strong></div>
-            </section>
-
-            <div class="show-nav">
-              <span class="active">Início</span>
-              <span>Minhas músicas</span>
-              <span>Records</span>
-              <span>Configurações</span>
+            <div id="auth-signed-in" class="hidden">
+              <p>Conectado como <strong id="account-email"></strong></p>
+              <div class="auth-actions">
+                <button id="sync-records-btn" type="button">Sincronizar recordes</button>
+                <button id="import-local-records-btn" class="secondary hidden" type="button">Importar recordes locais</button>
+                <button id="auth-signout-btn" class="secondary" type="button">Sair</button>
+              </div>
+              <p id="local-import-hint" class="hint hidden">Importe apenas se esses recordes locais forem seus; depois do envio, eles ficam vinculados a esta conta.</p>
+              <h3>Seus melhores recordes</h3>
+              <div id="records-list" class="records-list"></div>
             </div>
+            <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
           </div>
-        </aside>
-      </div>
-    </section>
-
-    <section id="screen-home" class="screen home-v2 hidden">
-      <header class="topbar">
-        <button id="menu-btn" class="icon-btn" type="button" aria-label="Menu">☰</button>
-        <div class="topbar-logo">
-          <span class="brand-eq topbar-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-          <strong>RHYTHM <em>DASH</em></strong>
-        </div>
-        <div class="topbar-right">
-          <button id="notif-btn" class="icon-btn" type="button" aria-label="Notificações">🔔</button>
-          <button id="account-chip" class="profile-chip" type="button" title="Sua conta">
-            <span id="account-chip-avatar" class="chip-avatar">👤</span>
-            <span class="profile-texts">
-              <span id="account-chip-name" class="chip-name">Convidado</span>
-              <span id="account-chip-level" class="chip-level">Nível 1</span>
-            </span>
-          </button>
-        </div>
+        </section>
       </header>
 
-      <div class="home-hero">
-        <p id="home-greeting" class="hero-kicker">BEM-VINDO AO RHYTHM DASH!</p>
-        <h1 class="hero-title">A música.<br />O desafio.<br />Sua <em class="accent">vibe</em>.</h1>
-        <p class="hero-sub">Escolha uma música e jogue. O mapa é gerado automaticamente a partir do áudio, direto no seu aparelho.</p>
-        <div class="hero-feats">
-          <span class="feat">🎬 Mapas gerados em tempo real</span>
-          <span class="feat">📶 Jogue offline quando quiser</span>
-          <span class="feat">🚫 Sem loja, sem limites</span>
-        </div>
-      </div>
+      <main class="home-content">
+        <section class="hero" aria-labelledby="home-heading">
+          <div class="hero-copy">
+            <p class="hero-kicker"><span></span> SINTA O RITMO</p>
+            <h1 id="home-heading">A música<br /><em>vira jogo.</em></h1>
+            <p class="hero-description">Escolha uma faixa. Pule no tempo. O som cria o desafio.</p>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="art-glow"></div>
+            <div class="vinyl-record">
+              <div class="vinyl-label">♪</div>
+            </div>
+            <div class="sound-bars">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+            <span class="bpm-tag">128 <small>BPM</small></span>
+            <span class="art-spark">✦</span>
+          </div>
+        </section>
 
-      <div class="home-body">
-        <div class="home-main">
-          <div class="panel home-actions">
-            <div class="search-box">
-              <input id="search-input" type="text" placeholder="Buscar música ou colar link (Spotify, YouTube, MP3)…" />
-              <button id="search-btn" class="btn-primary">Buscar</button>
-            </div>
-            <div class="quick-actions">
-              <label class="file-btn">
-                Subir arquivo do aparelho
-                <input id="file-input" type="file" accept="audio/*" hidden />
-              </label>
-              <button id="demo-btn" class="secondary">Tocar demo · 128 BPM</button>
-              <button id="install-btn" class="secondary hidden">Instalar app</button>
-            </div>
+        <button id="demo-btn" class="demo-button" type="button">
+          <span class="demo-play-icon" aria-hidden="true">▶</span>
+          <span class="demo-button-copy">
+            <strong>Jogar faixa demo</strong>
+            <small>32 s · 128 BPM · sem precisar buscar</small>
+          </span>
+          <span class="demo-button-arrow" aria-hidden="true">↗</span>
+        </button>
+
+        <section class="music-section" aria-labelledby="music-heading">
+          <div class="section-heading">
+            <p class="section-kicker">ESCOLHA SEU SOM</p>
+            <h2 id="music-heading">Escolha sua música</h2>
+            <p class="section-description">Busque pelo nome, artista ou cole um link.</p>
+          </div>
+          <div class="search-box">
+            <label class="sr-only" for="search-input">Buscar música ou colar um link</label>
+            <svg class="search-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
+              <circle cx="10.8" cy="10.8" r="6.8"></circle>
+              <path d="m16 16 4.2 4.2"></path>
+            </svg>
+            <input id="search-input" type="text" placeholder="Artista, música ou link…" />
+            <button id="search-btn" type="button">Buscar</button>
           </div>
 
-          <div id="search-results" class="results"></div>
+          <div class="source-divider" aria-hidden="true"><span>OU</span></div>
+          <div class="quick-actions">
+            <label class="file-btn">
+              <span class="file-icon" aria-hidden="true">♫</span>
+              <span class="file-copy">
+                <strong>Usar música do celular</strong>
+                <small>Escolha um arquivo de áudio</small>
+              </span>
+              <span class="file-arrow" aria-hidden="true">↗</span>
+              <input id="file-input" type="file" accept="audio/*" hidden />
+            </label>
+          </div>
+        </section>
 
-          <section class="panel records-panel" id="records-zone">
-            <div class="panel-head">
-              <h2>Seus records</h2>
-              <button id="records-see-all" class="link-btn" type="button">Ver todos</button>
-            </div>
-            <div id="home-records" class="records hidden"></div>
-          </section>
-        </div>
+        <div id="search-results" class="results"></div>
 
-        <aside class="home-side">
-          <section class="panel side-card" id="continue-card">
-            <h3>Continue jogando</h3>
-            <div id="continue-body" class="continue-body"></div>
-          </section>
-          <section class="panel side-card" id="daily-card">
-            <h3>Desafios diários</h3>
-            <ul id="daily-list" class="daily-list"></ul>
-            <p id="daily-xp" class="daily-xp"></p>
-          </section>
-        </aside>
-      </div>
-
-
-      <details class="settings settings-card" id="game-settings-section">
-        <summary>
-          <span class="settings-icon" aria-hidden="true">🎛️</span>
-          <span class="settings-copy">
-            <strong>Ajustes do jogo</strong>
-            <small>Modo, visual, backend e calibração</small>
-          </span>
-        </summary>
-        <div class="settings-body">
-          <label class="settings-field">
-            <span class="field-label">Modo de jogo</span>
+        <details class="settings">
+          <summary><span aria-hidden="true">⚙</span> Configurações</summary>
+          <div class="settings-body">
+            <label for="mode-select">Modo de jogo</label>
             <select id="mode-select">
-              <option value="beat">Modo Batida (recomendado)</option>
-              <option value="free">Modo Livre</option>
+              <option value="beat">🎯 Modo Batida (recomendado)</option>
+              <option value="free">🕹️ Modo Livre</option>
             </select>
-          </label>
+            <p class="hint">Cada faixa vira seu próprio mapa. No Modo Batida, há um obstáculo saltável em cada batida; no Modo Livre, o mapa cria pausas e desafios variados.</p>
 
-          <label class="settings-field">
-            <span class="field-label">Tema visual</span>
-            <select id="theme-select">
-              <option value="auto">Automático (cores da própria música)</option>
-              <option value="neon">Neon</option>
-              <option value="sunset">Pôr-do-sol</option>
-              <option value="ocean">Oceano</option>
-              <option value="vulcao">Vulcão</option>
-              <option value="matrix">Matrix</option>
-            </select>
-          </label>
-
-          <div class="info-note">
-            <p class="hint">
-              Backend próprio (yt-dlp) — músicas completas de qualquer fonte. Requer HTTPS se o
-              app estiver rodando em https (veja o README para túnel/deploy).
-            </p>
-          </div>
-          <div class="backend-row">
-            <input id="backend-url" type="text" placeholder="https://seu-servidor.exemplo.com" />
-            <input id="backend-key" type="text" placeholder="chave (opcional)" />
-            <button id="backend-test-btn">Testar</button>
-          </div>
-          <p id="backend-status" class="hint"></p>
-          <div class="info-note compact-note">
-            <p class="hint">
-              Latência do áudio — fones Bluetooth atrasam o som e atrapalham o ritmo.
-              Toque no ritmo dos bipes para calibrar. Atual: <strong id="latency-value">0 ms</strong>
-            </p>
-            <button id="calibrate-btn" class="secondary settings-action">Calibrar latência</button>
-          </div>
-        </div>
-      </details>
-
-      <details class="settings settings-card" id="supabase-section">
-        <summary>
-          <span class="settings-icon" aria-hidden="true">☁️</span>
-          <span class="settings-copy">
-            <strong>Banco de dados — Supabase</strong>
-            <small>Sincronize contas e recordes na nuvem</small>
-          </span>
-        </summary>
-        <div class="settings-body">
-          <div class="info-note">
-            <p class="hint">
-            Liga o banco de dados online: contas por email + recordes salvos na nuvem.
-            No seu projeto Supabase, vá em <strong>Settings → API</strong> e copie a
-            <strong>Project URL</strong> e a <strong>anon public key</strong> (guia completo no README).
-            </p>
-          </div>
-          <div class="backend-row">
-            <input id="sb-url" type="url" placeholder="https://SEU-PROJETO.supabase.co" autocomplete="off" />
-          </div>
-          <div class="backend-row">
-            <input id="sb-key" type="password" placeholder="anon public key" autocomplete="off" />
-            <button id="sb-connect" type="button">Conectar</button>
-          </div>
-          <p id="sb-status" class="hint"></p>
-          <div id="sb-logged-row" class="backend-row hidden">
-            <span id="sb-logged-label" class="hint"></span>
-            <button id="sb-logout" type="button" class="secondary">Sair da nuvem</button>
-          </div>
-        </div>
-      </details>
-
-      <details class="settings settings-card" id="account-section">
-        <summary>
-          <span class="settings-icon" aria-hidden="true">👤</span>
-          <span class="settings-copy">
-            <strong>Sua conta</strong>
-            <small>Perfis locais com recordes separados</small>
-          </span>
-        </summary>
-        <div class="settings-body">
-          <p id="account-active" class="hint account-banner"></p>
-          <div id="account-list" class="account-list"></div>
-
-          <div id="account-login" class="hidden auth-block">
-            <p class="hint" id="account-login-label"></p>
-            <div class="backend-row">
-              <input id="account-login-pass" type="password" maxlength="16" placeholder="senha" autocomplete="off" />
-              <button id="account-login-ok" type="button">Entrar</button>
-              <button id="account-login-cancel" type="button" class="secondary">Cancelar</button>
+            <div class="setting-control">
+              <div class="setting-label-row">
+                <label for="timing-offset">Sincronização do toque</label>
+                <output id="timing-offset-value" for="timing-offset">0 ms</output>
+              </div>
+              <input id="timing-offset" type="range" min="-120" max="120" step="10" value="0" />
+              <p class="hint">Ajuste em passos de 10 ms se o áudio e o toque parecerem fora de sincronia. Valores negativos compensam áudio atrasado.</p>
             </div>
-            <p id="account-login-err" class="account-err hint"></p>
-          </div>
 
-          <form id="account-form" class="account-form hidden auth-block" autocomplete="off">
-            <div class="backend-row">
-              <input id="account-name" type="text" maxlength="16" placeholder="usuário (2–16 letras)" autocomplete="off" />
-              <input id="account-pass" type="password" maxlength="16" placeholder="senha (opcional, 4+)" autocomplete="new-password" />
+            <div class="setting-control">
+              <div class="setting-label-row">
+                <label for="music-volume">Volume da música</label>
+                <output id="music-volume-value" for="music-volume">85%</output>
+              </div>
+              <input id="music-volume" type="range" min="0" max="100" step="1" value="85" />
             </div>
-            <div class="backend-row">
-              <input id="account-email" type="email" maxlength="64" placeholder="email (opcional)" autocomplete="off" />
-            </div>
-            <p class="hint field-label avatar-label">Escolha seu avatar</p>
-            <div id="account-avatars" class="avatar-grid" role="radiogroup" aria-label="Avatar da conta"></div>
-            <div class="backend-row">
-              <button type="submit" class="btn-primary">Criar conta</button>
-              <button type="button" id="account-cancel" class="secondary">Cancelar</button>
-            </div>
-            <p id="account-form-err" class="account-err hint"></p>
-          </form>
 
-          <div class="backend-row account-actions-row">
-            <button id="account-create-btn" type="button">Criar nova conta</button>
-          </div>
-          <p class="hint account-footnote">A conta fica salva só neste aparelho. Cada jogador tem os próprios recordes.</p>
-        </div>
-      </details>
+            <label class="setting-toggle" for="sound-enabled">
+              <input id="sound-enabled" type="checkbox" checked />
+              <span><strong>Efeitos sonoros</strong><small>Feedback de batida, combo e interface</small></span>
+            </label>
+            <label class="setting-toggle" for="haptics-enabled">
+              <input id="haptics-enabled" type="checkbox" checked />
+              <span><strong>Vibração tátil</strong><small>Desative para economizar bateria ou jogar em silêncio</small></span>
+            </label>
 
-      <details class="settings settings-card" id="turma-section">
-        <summary>
-          <span class="settings-icon" aria-hidden="true">🏁</span>
-          <span class="settings-copy">
-            <strong>Modo Turma</strong>
-            <small>Ranking local para jogar em grupo</small>
-          </span>
-        </summary>
-        <div class="settings-body">
-          <div class="info-note">
             <p class="hint">
-              Cada jogador toca a mesma música, um de cada vez — no final, o ranking com pódio.
+              Backend próprio (yt-dlp) — para músicas completas. Requer HTTPS quando o app estiver em HTTPS.
             </p>
+            <div class="backend-row">
+              <input id="backend-url" type="url" placeholder="https://seu-servidor.exemplo.com" aria-label="Endereço do backend" />
+              <input id="backend-key" type="password" placeholder="Chave (opcional)" aria-label="Chave do backend" />
+              <button id="backend-test-btn" type="button">Testar</button>
+            </div>
+            <p id="backend-status" class="hint" role="status"></p>
           </div>
-          <div class="backend-row">
-            <input id="turma-name" type="text" placeholder="Nome do jogador" maxlength="16" />
-            <button id="turma-add">Adicionar</button>
-          </div>
-          <ul id="turma-list" class="turma-list"></ul>
-          <div class="backend-row">
-            <button id="turma-toggle">▶ Ativar modo turma</button>
-            <button id="turma-clear" class="secondary">Limpar turma</button>
-          </div>
-          <p id="turma-status" class="hint"></p>
-        </div>
-      </details>
-
-      <footer class="home-footer">Rhythm Dash — a música compõe a fase · open source no GitHub</footer>
-
-      <nav class="home-nav" aria-label="Navegação">
-        <button class="hnav active" data-nav="top" type="button">🏠<span>Início</span></button>
-        <button class="hnav" data-nav="music" type="button">🎵<span>Minhas músicas</span></button>
-        <button class="hnav" data-nav="records" type="button">🏆<span>Records</span></button>
-        <button class="hnav" data-nav="config" type="button">⚙️<span>Configurações</span></button>
-      </nav>
-      <div id="xp-toast" class="xp-toast hidden" role="status" aria-live="polite"></div>
+        </details>
+        <p class="home-footer">Feito para jogar no celular <span aria-hidden="true">·</span> no seu ritmo</p>
+      </main>
     </section>
 
     <section id="screen-loading" class="screen hidden">
@@ -436,19 +226,12 @@
     </section>
 
     <section id="screen-game" class="screen hidden">
-      <canvas id="game-canvas"></canvas>
-      <div id="song-badge" class="song-badge hidden"></div>
-      <button id="pause-btn" class="pause-btn" aria-label="Pausar">⏸</button>
+      <canvas id="game-canvas" role="img" aria-label="Jogo Rhythm Dash. Toque em qualquer lugar da tela no ritmo da música para pular obstáculos."></canvas>
+      <button id="pause-btn" class="pause-btn" type="button" aria-label="Pausar jogo" title="Pausar">⏸</button>
     </section>
 
     <div id="overlay" class="overlay hidden"></div>
-
-    <!-- Modo paisagem: cobre tudo em aparelho touch em pé (retrato). -->
-    <div id="rotate-overlay" class="rotate-overlay" role="alert" aria-live="assertive">
-      <div class="rotate-device" aria-hidden="true"></div>
-      <h2>Gire o celular</h2>
-      <p>O Rhythm Dash é jogado no modo paisagem (horizontal) 📱↻</p>
-    </div>
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   </div>
 
 </body>
