@@ -16,6 +16,10 @@ export class ParticlePool {
     this.cursor = 0;
   }
 
+  clear() {
+    this.alive.fill(0);
+  }
+
   spawn(x, y, count, { speed = 120, life = 0.5, color = '#ffffff', size = 3, spread = Math.PI * 2 } = {}) {
     for (let i = 0; i < count; i++) {
       const idx = this.cursor;

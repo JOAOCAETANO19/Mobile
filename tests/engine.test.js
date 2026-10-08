@@ -8,6 +8,14 @@ function levelWithDrop(bpm = 120, durationSec = 8) {
   return generateLevel(analysis, { title: 'Test', artist: 'X' });
 }
 
+test('busca do beat seguinte e mais próximo respeita a grade musical ordenada', () => {
+  const engine = new GameEngine(levelWithDrop(), {}, MODE.BEAT);
+  assert.equal(engine.nearestBeat(0.24).time, 0);
+  assert.equal(engine.nearestBeat(0.26).time, 0.5);
+  assert.equal(engine.nearestBeat(0.25).time, 0); // empate favorece o beat anterior
+  assert.equal(engine.nextBeat(0.5005).time, 0.5); // tolerância de 1 ms
+});
+
 test('tap no modo batida, exatamente na batida, gera PERFEITO', () => {
   const level = levelWithDrop();
   let judged = null;
@@ -19,15 +27,23 @@ test('tap no modo batida, exatamente na batida, gera PERFEITO', () => {
   assert.equal(engine.player.jumpStart, beat.time);
 });
 
-test('tap fora da tolerância não pula nem julga', () => {
+test('tap fora da tolerância não pula nem julga, mas sinaliza cedo/tarde sem punir o combo', () => {
   const level = levelWithDrop();
   let judged = null;
-  const engine = new GameEngine(level, { onJudge: (j) => { judged = j; } }, MODE.BEAT);
+  const misses = [];
+  const engine = new GameEngine(level, {
+    onJudge: (j) => { judged = j; },
+    onTapMiss: (deltaMs, beat) => misses.push({ deltaMs, beat }),
+  }, MODE.BEAT);
   const beat = engine.level.beats[2];
   const { T } = physicsForBpm(level.bpm);
-  engine.tap(beat.time + T * 0.5); // bem fora da janela de ~0.3 batida
+  const accepted = engine.tap(beat.time + T * 0.5); // bem fora da janela de ~0.3 batida
+  assert.equal(accepted, false);
   assert.equal(judged, null);
   assert.equal(engine.player.jumping, false);
+  assert.equal(engine.combo, 0);
+  assert.equal(misses.length, 1);
+  assert.ok(misses[0].deltaMs > 0);
 });
 
 test('tap dentro da janela GOOD mas fora do PERFECT gera BOM', () => {
@@ -38,6 +54,22 @@ test('tap dentro da janela GOOD mas fora do PERFECT gera BOM', () => {
   const deltaSec = (JUDGE.PERFECT_MS + 30) / 1000;
   engine.tap(beat.time + deltaSec);
   assert.equal(judged, 'GOOD');
+});
+
+test('tap dentro da janela do próximo beat pode ser antecipado antes do frame de aterrissagem', () => {
+  const level = levelWithDrop();
+  const engine = new GameEngine(level, {}, MODE.BEAT);
+  const firstBeat = level.beats[2];
+  const nextBeat = level.beats[3];
+  engine.tap(firstBeat.time);
+
+  // Simula um frame visual pouco antes de aterrissar e um toque 40 ms antes do beat seguinte.
+  engine.updatePlayer(nextBeat.time - 0.04, 0.016);
+  assert.equal(engine.player.jumping, true);
+  assert.equal(engine.tap(nextBeat.time - 0.04), true);
+  assert.equal(engine.player.jumpStart, nextBeat.time);
+  assert.equal(engine.player.landedBeatIndex, nextBeat.index);
+  assert.equal(engine.combo, 2);
 });
 
 test('updatePlayer: jogador aterrissa e reseta jumping após a duração de 1 batida', () => {
@@ -168,6 +200,22 @@ test('escudo: absorve uma colisão fatal e desaparece (a segunda colisão mata)'
   assert.equal(events.death, 1);
 });
 
+test('reset de partida limpa partículas da tentativa anterior', () => {
+  const engine = new GameEngine(levelWithDrop(), {}, MODE.BEAT);
+  engine.particles.spawn(10, 10, 3);
+  assert.equal(engine.particles.alive.reduce((sum, alive) => sum + alive, 0), 3);
+  engine.reset(1.5);
+  assert.equal(engine.particles.alive.reduce((sum, alive) => sum + alive, 0), 0);
+});
+
+test('Modo Livre gira continuamente ao longo da duração real do pulo', () => {
+  const engine = new GameEngine(levelWithDrop(), {}, MODE.FREE);
+  engine.tap(0);
+  engine.updatePlayer(0.2, 0.016);
+  const flightTime = (2 * engine.freeGravity.v) / engine.freeGravity.g;
+  assert.ok(Math.abs(engine.player.rotation - (0.2 / flightTime) * 90) < 1e-9);
+});
+
 test('boosts com física real: pad estica o arco para 1,15 batidas e orb faz air-jump da altura atual', () => {
   const level = levelWithDrop(); // 120 BPM -> T = 0,5s
   const { T, v, g } = physicsForBpm(level.bpm);
@@ -177,8 +225,15 @@ test('boosts com física real: pad estica o arco para 1,15 batidas e orb faz air
 
   // ---- PAD (no chão): o arco passa a durar exatamente 1,15 batidas ----
   {
-    const engine = new GameEngine(level, {}, MODE.BEAT);
+    let padTriggered = false;
+    let orbTriggered = false;
+    const engine = new GameEngine(level, {
+      onPad: () => { padTriggered = true; },
+      onOrb: () => { orbTriggered = true; },
+    }, MODE.BEAT);
     engine.checkCollisions(1.0, 20); // cubo no chão passa sobre o pad
+    assert.equal(padTriggered, true);
+    assert.equal(orbTriggered, false);
     assert.equal(engine.player.jumping, true);
     assert.ok(Math.abs(engine.player.vy - v * BOOST.PAD_ARC_BEATS) < 1e-9);
     // Tempo de voo real = 2·vy/g = 1,15·T

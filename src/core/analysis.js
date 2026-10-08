@@ -25,13 +25,14 @@ export function toMono(audioBuffer) {
 }
 
 /**
- * Calcula o spectral flux quadro a quadro (energia de subida no espectro = proxy de onset).
- * Também retorna o centróide espectral por quadro (para o tema de cor) e o RMS (energia).
+ * Calcula o spectral flux geral e o flux grave (até 180 Hz) para localizar kicks/batidas de baixo.
+ * Também retorna o centróide espectral por quadro (tema) e o RMS (energia).
  */
 export function computeFrames(mono, sampleRate) {
   const window = hannWindow(FFT_SIZE);
   const frameCount = Math.max(0, Math.floor((mono.length - FFT_SIZE) / HOP_SIZE) + 1);
   const flux = new Float64Array(frameCount);
+  const bassFlux = new Float64Array(frameCount);
   const centroid = new Float64Array(frameCount);
   const rms = new Float64Array(frameCount);
   const times = new Float64Array(frameCount);
@@ -47,9 +48,11 @@ export function computeFrames(mono, sampleRate) {
 
     // Spectral flux: soma das subidas positivas de magnitude entre quadros consecutivos.
     let fluxSum = 0;
+    let bassFluxSum = 0;
     let centSum = 0;
     let magSum = 0;
     let energy = 0;
+    const bassMaxBin = Math.min(mags.length - 1, Math.floor((180 * FFT_SIZE) / sampleRate));
     for (let i = 0; i < mags.length; i++) {
       const m = mags[i];
       energy += m * m;
@@ -57,17 +60,23 @@ export function computeFrames(mono, sampleRate) {
       magSum += m;
       if (prevMags) {
         const diff = m - prevMags[i];
-        if (diff > 0) fluxSum += diff;
+        if (diff > 0) {
+          fluxSum += diff;
+          if (i > 0 && i <= bassMaxBin) bassFluxSum += diff;
+        }
       }
     }
     flux[f] = fluxSum;
+    bassFlux[f] = bassFluxSum;
     centroid[f] = magSum > 0 ? centSum / magSum / mags.length : 0; // normalizado 0..1
     rms[f] = Math.sqrt(energy / mags.length);
-    times[f] = start / sampleRate;
+    // Cada espectro representa a janela no seu centro, o que reduz o atraso de fase
+    // ao comparar o onset detectado com o instante real do kick.
+    times[f] = (start + FFT_SIZE / 2) / sampleRate;
     prevMags = mags;
   }
 
-  return { flux, centroid, rms, times, hopSize: HOP_SIZE, fftSize: FFT_SIZE };
+  return { flux, bassFlux, centroid, rms, times, hopSize: HOP_SIZE, fftSize: FFT_SIZE };
 }
 
 /** Normaliza um array para [0,1]. */
@@ -153,6 +162,62 @@ export function estimateBpm(onsets, { minBpm = MIN_BPM, maxBpm = MAX_BPM } = {})
   return { bpm: Math.round(bpm * 10) / 10, confidence };
 }
 
+/** Refina o BPM perto da estimativa geral usando a recorrência dos ataques graves. */
+export function refineBpmFromOnsets(initialBpm, onsets, {
+  rangeFraction = 0.08,
+  minConfidence = 0.28,
+  stepBpm = 0.1,
+  phaseBins = 48,
+} = {}) {
+  if (!Number.isFinite(initialBpm) || initialBpm <= 0 || !Array.isArray(onsets)) {
+    return { bpm: initialBpm, confidence: 0, refined: false };
+  }
+  const events = onsets
+    .filter((onset) => Number.isFinite(onset?.time))
+    .map((onset) => ({
+      time: onset.time,
+      weight: Number.isFinite(Number(onset.strength))
+        ? Math.max(0.05, Math.min(1, Number(onset.strength)))
+        : 0.5,
+    }));
+  if (events.length < 5) return { bpm: initialBpm, confidence: 0, refined: false };
+
+  const minBpm = Math.max(MIN_BPM, initialBpm * (1 - rangeFraction));
+  const maxBpm = Math.min(MAX_BPM, initialBpm * (1 + rangeFraction));
+  const step = Math.max(0.05, stepBpm);
+  const totalWeight = events.reduce((sum, event) => sum + event.weight, 0);
+  const initialScoreBpm = initialBpm;
+  let bestBpm = initialBpm;
+  let bestScore = -Infinity;
+
+  for (let candidate = minBpm; candidate <= maxBpm + step / 2; candidate += step) {
+    const period = 60 / candidate;
+    const sigma = period * 0.075;
+    const phases = events.map((event) => ((event.time % period) + period) % period);
+    let phaseScore = 0;
+    for (let bin = 0; bin < phaseBins; bin++) {
+      const phase = (bin / phaseBins) * period;
+      let score = 0;
+      for (let i = 0; i < events.length; i++) {
+        const rawDistance = Math.abs(phases[i] - phase);
+        const distance = Math.min(rawDistance, period - rawDistance);
+        score += events[i].weight * Math.exp(-0.5 * (distance / sigma) ** 2);
+      }
+      phaseScore = Math.max(phaseScore, score / totalWeight);
+    }
+    // Em empates, prefere não deslocar o BPM mais do que o necessário.
+    if (phaseScore > bestScore + 1e-9
+      || (Math.abs(phaseScore - bestScore) <= 1e-9
+        && Math.abs(candidate - initialScoreBpm) < Math.abs(bestBpm - initialScoreBpm))) {
+      bestScore = phaseScore;
+      bestBpm = candidate;
+    }
+  }
+
+  if (bestScore < minConfidence) return { bpm: initialBpm, confidence: bestScore, refined: false };
+  return { bpm: Math.round(bestBpm * 10) / 10, confidence: bestScore, refined: true };
+}
+
 /**
  * Divide a faixa em seções (intro, build, drop, break, flow, outro) com base na
  * energia (RMS) e na densidade de onsets ao longo do tempo, usando uma janela deslizante.
@@ -212,13 +277,47 @@ export function detectSections(frames, onsets, durationSec) {
   }
   sections.push({ label: prevLabel || 'flow', start: sectionStart, end: durationSec });
 
-  // Funde seções minúsculas (<2s) com a vizinha anterior para evitar ruído.
+  // Anota a personalidade musical de cada seção para o levelgen usar energia e densidade,
+  // em vez de depender apenas de rótulos rígidos como "drop" ou "flow".
+  const withMetrics = [];
+  for (const section of sections) {
+    const firstWindow = Math.floor(section.start / sectionWindowSec);
+    const lastWindow = Math.min(numWindows, Math.ceil(section.end / sectionWindowSec));
+    let energy = 0;
+    let onsetDensity = 0;
+    let count = 0;
+    for (let w = firstWindow; w < lastWindow; w++) {
+      energy += windowEnergy[w];
+      onsetDensity += windowOnsetDensity[w] / maxDensity;
+      count++;
+    }
+    const avgEnergy = count ? energy / count : 0;
+    const avgOnsetDensity = count ? onsetDensity / count : 0;
+    withMetrics.push({
+      ...section,
+      energy: avgEnergy,
+      onsetDensity: avgOnsetDensity,
+      intensity: Math.max(0, Math.min(1, avgEnergy * 0.65 + avgOnsetDensity * 0.35)),
+    });
+  }
+
+  // Funde seções minúsculas (<2s) com a vizinha anterior para evitar ruído,
+  // mantendo a média ponderada dos dados musicais para a geração do mapa.
   const merged = [];
-  for (const s of sections) {
-    if (merged.length && s.end - s.start < 2) {
-      merged[merged.length - 1].end = s.end;
+  for (const section of withMetrics) {
+    if (merged.length && section.end - section.start < 2) {
+      const previous = merged[merged.length - 1];
+      const previousDuration = previous.end - previous.start;
+      const sectionDuration = section.end - section.start;
+      const totalDuration = previousDuration + sectionDuration;
+      for (const metric of ['energy', 'onsetDensity', 'intensity']) {
+        previous[metric] = totalDuration > 0
+          ? (previous[metric] * previousDuration + section[metric] * sectionDuration) / totalDuration
+          : previous[metric];
+      }
+      previous.end = section.end;
     } else {
-      merged.push({ ...s });
+      merged.push({ ...section });
     }
   }
   return merged;
@@ -260,7 +359,15 @@ export function analyzeAudioBuffer(audioBuffer, options = {}) {
   const mono = toMono(audioBuffer);
   const frames = computeFrames(mono, sampleRate);
   const onsets = detectOnsets(frames.flux, frames.times, options.onsetOptions);
-  const { bpm, confidence } = estimateBpm(onsets, options.bpmOptions);
+  const bassOnsets = detectOnsets(
+    frames.bassFlux,
+    frames.times,
+    options.bassOnsetOptions || options.onsetOptions,
+  );
+  const generalTempo = estimateBpm(onsets, options.bpmOptions);
+  const bassTempo = refineBpmFromOnsets(generalTempo.bpm, bassOnsets, options.bassBpmOptions);
+  const bpm = bassTempo.refined ? bassTempo.bpm : generalTempo.bpm;
+  const bpmConfidence = bassTempo.refined ? bassTempo.confidence : generalTempo.confidence;
   const rawSections = detectSections(frames, onsets, durationSec);
   const sections = deriveTheme(frames, rawSections);
 
@@ -268,8 +375,11 @@ export function analyzeAudioBuffer(audioBuffer, options = {}) {
     durationSec,
     sampleRate,
     bpm,
-    bpmConfidence: confidence,
+    bpmConfidence,
+    bpmSource: bassTempo.refined ? 'bass' : 'general',
+    bassBpmConfidence: bassTempo.confidence,
     onsets,
+    bassOnsets,
     sections,
     frames: { times: frames.times, rms: normalize(frames.rms), centroid: frames.centroid },
   };

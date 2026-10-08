@@ -85,29 +85,38 @@ export class SyncedPlayer {
   play(fromSeconds = 0) {
     if (this.ctx.state === 'suspended') this.ctx.resume();
     this.stop();
-    this.source = this.ctx.createBufferSource();
-    this.source.buffer = this.buffer;
-    this.source.connect(this.gainNode);
-    this.source.start(0, fromSeconds);
+    const source = this.ctx.createBufferSource();
+    this.source = source;
+    source.buffer = this.buffer;
+    source.connect(this.gainNode);
+    source.onended = () => {
+      // Ignore o evento atrasado de uma fonte substituída/parada. Ao fim natural,
+      // avance o relógio até o final para que o nível conclua mesmo sem outro frame.
+      if (this.source !== source) return;
+      if (this.playing) this.offset = this.buffer.duration;
+      this.playing = false;
+      this.source = null;
+      try { source.disconnect(); } catch { /* já desconectada */ }
+    };
+    source.start(0, fromSeconds);
     this.startedAtCtxTime = this.ctx.currentTime;
     this.offset = fromSeconds;
     this.playing = true;
-    this.source.onended = () => {
-      if (this.playing) this.playing = false;
-    };
   }
 
   stop() {
-    if (this.source) {
-      try { this.source.stop(); } catch (e) { /* já parado */ }
-      this.source.disconnect();
-      this.source = null;
-    }
+    if (this.playing) this.offset = this.getCurrentTime();
+    const source = this.source;
+    this.source = null;
     this.playing = false;
+    if (source) {
+      try { source.stop(); } catch { /* já parada */ }
+      try { source.disconnect(); } catch { /* já desconectada */ }
+    }
   }
 
   setVolume(v) {
-    this.gainNode.gain.value = v;
+    this.gainNode.gain.value = Math.max(0, Math.min(1, Number(v) || 0));
   }
 
   /** Tempo atual da faixa em segundos, derivado do relógio do AudioContext. */

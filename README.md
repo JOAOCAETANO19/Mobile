@@ -20,15 +20,18 @@ velocidade que acompanham a faixa.
 | 🔗 **Link direto** | Cole uma URL de MP3/M4A/OGG/WAV/FLAC (com fallback de CORS) |
 | 📂 **Arquivo local** | Envie uma música do aparelho — 100% offline/privada, completa |
 | 🥁 **Sincronia com a batida** | Detecção por *spectral flux* + autocorrelação (FFT própria, sem libs) |
-| 🎯 **Modo Batida** (*default*) | O pulo dura exatamente **1 batida**: toque quando o anel fecha (na batida) e o obstáculo passa no pico do pulo → **1 clique = 1 obstáculo = 1 batida**, com combo/PERFEITO. Janelas de julgamento **musicais** (PERFEITO/BOM = fração da batida, no max. o valor fixo em ms) + **linha de hit** na posição do jogador e **glow pulsante** nos obstáculos, tudo no acento |
+| 🎯 **Modo Batida** (*default*) | O pulo dura exatamente **1 batida** e cada beat da faixa vira um obstáculo saltável, inclusive em intro e break. A grade prioriza os ataques graves (kick); o obstáculo chega no pico do salto. Se faltarem graves, usa os onsets gerais |
 | 🕹️ **Modo Livre** | Geometry Dash clássico: pule livremente sobre obstáculos (ainda sincronizados à música) |
 | ⏱️ **Contagem 3-2-1** | Antes de iniciar, retomar do checkpoint, recomeçar ou "jogar de novo": contagem regressiva animada com a cena congelada no ponto de partida — a música (e o relógio do jogo) só começa no "go!" |
-| 🎵 **Padrões rítmicos** | O levelgen monta células de 1–2 batidas: *double* (dois pulos em sequência), *bloco+espinho* e *[pad, espinho]* (o pad estica o arco para **1,15 batidas** e carrega por cima do espinho) — com a garantia de **nenhuma batida ocupada duas vezes** |
-| 🎨 **Tema da música** | Paleta de cada seção derivada do centróide espectral (sinestesia visual) |
-| 🌆 **Visual synthwave** | Renderer canvas: sol pulsante na batida, 2 camadas de montanhas em parallax, grade em perspectiva pulsando com a música, cubo com gradiente/rosto/rastro neon, HUD translúcido |
+| 🎵 **Mapas guiados pela música** | Modo Batida cria um obstáculo por pulso e varia as frases visuais; Modo Livre mantém a geração adaptativa, com pausas, trilhas coletáveis e power-ups |
+| 🎨 **Cenários por faixa** | Paleta espectral por seção, cidade procedural em parallax, pista neon e obstáculos facetados com brilho no acento musical |
+| 🌆 **Visual synthwave** | Renderer canvas: sol pulsante na batida, montanhas em parallax, grade rítmica, cubo com gradiente/rosto/rastro neon e HUD responsivo com pontuação, combo, seção e progresso da faixa |
 | 🧱 **Geração determinística** | A mesma música sempre gera o mesmo mapa (seed = hash da faixa) |
+| 🔐 **Conta e recordes na nuvem** | Cadastro guiado por e-mail, confirmação com reenvio do link e sincronização dos recordes pessoais entre aparelhos via Supabase |
 | 📱 **PWA instalável** | Adicione à tela inicial (Android/iOS Safari) e jogue |
-| 🎮 **Gameplay** | Espinhos, blocos, pads (amarelos — arco esticado de **1,15 batidas**, física real), orbs (air-jump **a partir da altura atual**), escudo 🛡️, coletáveis 💎 + multiplicador de combo (1x→2x→3x→4x) |
+| 👆 **Controles mobile** | Toque em qualquer parte da tela para pular, alvo de pausa confortável, safe areas para notch/home indicator e pausa automática ao sair do app |
+| 🎚️ **Ajustes pessoais** | Calibração de latência em passos de 10 ms, volume da música, efeitos sonoros e vibração — preferências salvas no aparelho |
+| 🎮 **Gameplay** | Espinhos e blocos no Modo Batida; no Modo Livre também há pads (arco esticado de **1,15 batidas**), orbs (air-jump da altura atual), escudos, coletáveis e multiplicador de combo |
 
 ## ▶️ Como rodar
 
@@ -44,11 +47,15 @@ npm run build      # gera dist/
 npm run preview
 ```
 
-Testes do pipeline (BPM, geração de mapa, PRNG):
+Testes automatizados:
 
 ```bash
 npm test
 ```
+
+## ☁️ Conta e recordes do Supabase
+
+O app oferece cadastro/login por e-mail, mantém a sessão neste aparelho e sincroniza a melhor pontuação por faixa entre aparelhos. A integração REST usa a chave pública publishable (nunca uma chave `service_role`); o SQL com RLS e a configuração de Auth/SMTP estão em [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md). Antes de publicar, execute [`supabase/schema.sql`](./supabase/schema.sql) no SQL Editor do projeto e configure os URLs de redirecionamento e o SMTP para envio público de confirmações.
 
 ## 🏗️ Arquitetura
 
@@ -84,14 +91,17 @@ server/
 
 **Modo Batida (detalhes):**
 - A física é derivada do BPM: `v = 4h/T`, `g = 8h/T²` com `T = 60/BPM` → o arco do pulo dura exatamente 1 batida (altura fixa de 1.9 células).
-- Cada espinho é plantado no **meio da batida** (`beat + T/2`) — o pico do pulo. Tocar na batida N passa por cima do espinho e aterrissa na batida N+1.
-- Densidade segue a seção: drop ≈ toda batida, build a cada 2, flow a cada 3, intro/break sem obstáculos.
+- Cada beat recebe exatamente **um obstáculo saltável** (espinho ou bloco), inclusive em intro, break e outro. O hazard fica em `beat + T/2`, no pico do salto; tocar na batida N passa por cima e aterrissa na batida N+1.
+- A grade é alinhada preferencialmente aos ataques graves (kick); quando há poucos ataques graves, usa os onsets gerais. Os acentos e as seções variam o tipo e o visual do obstáculo sem pular nenhum beat.
 - Timing: PERFEITO ±60ms, BOM ±150ms, tolerância total ±~0.3 batida (bem perdoável). O anel ao redor do cubo fecha exatamente na batida (guia visual).
-- Só usa espinhos de 1 célula (com arco de 1 batida, obstáculos largos fariam aterrissar neles).
+
+**Modo Livre:**
+- Mantém o levelgen adaptativo anterior: densidade e pausas variam por seção e energia, com coletáveis, pads, orbs e escudos.
+- Pads e orbs deixam espaço para pousar e preparar o próximo salto; trechos calmos podem ficar sem hazards.
 
 **Mecânica:**
 - Rotação do cubo sincronizada: no modo batida gira exatamente 90° por pulo (aterrissa "de pé").
-- Squash & stretch (estica no pulo, espreme na aterrissagem), faíscas de **near-miss** ("QUASE! 💨" soma no combo **e em pontos**), vibração no celular (perfect/marco/escudo/morte), feedback visual de timing.
+- Squash & stretch (estica no pulo, espreme na aterrissagem), faíscas de **near-miss** ("QUASE! 💨" soma no combo **e em pontos**), vibração configurável no celular e feedback visual/sonoro distinto para toques cedo, perfeitos, bons ou atrasados.
 - **Multiplicador de pontuação por combo** (degraus): 1x (padrão) → **2x** a partir de 10 de combo → **3x** a partir de 25 → **4x** a partir de 50. Cruzar um degrau dispara banner de "MARCO DE COMBO" na tela + vibração. Tudo converte por uma função central `registerHit()` (toques e near-misses).
 - **Escudo 🛡️**: power-up raro (seções drop/build) que absorve **uma** colisão fatal e desaparece — dá um respiro no momento crítico.
 - **Screen-shake reativo**: leve no near-miss, médio quando o escudo quebra, forte na morte.
@@ -103,7 +113,7 @@ server/
 - Tipografia própria: **Poppins** (texto) + **Space Grotesk** (títulos/HUD) via Google Fonts.
 - Tela inicial com **cubo 3D animado flutuando** + glow de fundo pulsante.
 - Cards de resultado, inputs e overlays (pausa/morte/vitória) com gradientes, bordas translúcidas e sombras.
-- Botão de pausa no canto do canvas (conectado via `pointerdown`, sem delay de clique).
+- Botão de pausa de 48 px no canto do jogo, overlays acessíveis com foco/teclado e controles adaptados a notch, orientação e telas estreitas.
 
 **Decisões-chave:**
 - O **relógio do jogo é o relógio do áudio** (`AudioContext.currentTime`): posição do jogador,
