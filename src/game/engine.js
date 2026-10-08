@@ -75,13 +75,26 @@ export function multiplierForCombo(combo) {
 const TRAIL_WINDOW_SEC = 0.3; // rastro: janela de posições recentes do jogador
 const TRAIL_MAX_POINTS = 24;
 
+function lowerBoundByTime(items, time) {
+  let low = 0;
+  let high = items.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (items[middle].time < time) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
 /**
  * @typedef {Object} EngineCallbacks
- * @property {(judge: 'PERFECT'|'GOOD'|'MISS', combo: number) => void} [onJudge]
+ * @property {(judge: 'PERFECT'|'GOOD', combo: number) => void} [onJudge]
+ * @property {(deltaMs: number, beat: object) => void} [onTapMiss]
  * @property {(obstacle: object) => void} [onNearMiss]
  * @property {(checkpoint: {time:number,label:string,progressPct:number}) => void} [onDeath]
  * @property {(collectible: object) => void} [onCollect]
- * @property {() => void} [onOrb]
+ * @property {(obstacle: object) => void} [onOrb]
+ * @property {(obstacle: object) => void} [onPad]
  * @property {(section: object) => void} [onSectionChange]
  * @property {(milestone: {combo:number,mult:number}) => void} [onComboMilestone]
  * @property {(obstacle: object) => void} [onShieldPickup]
@@ -128,6 +141,7 @@ export class GameEngine {
     this.shieldActive = false; // escudo absorve uma colisão fatal e depois desaparece
     this.trail = []; // posições recentes {y, t} para o rastro neon
     this.finished = false;
+    this.particles?.clear();
   }
 
   /** Soma pontos já aplicando o multiplicador do combo atual. */
@@ -154,30 +168,27 @@ export class GameEngine {
     return { gained, milestone, combo: this.combo };
   }
 
-  /** Beat mais próximo (para o anel visual de expectativa e para o snap do pulo). */
+  /** Beat seguinte (para o snap do pulo); grid ordenado, busca em O(log n). */
   nextBeat(currentTime) {
     const { beats } = this.level;
-    for (let i = 0; i < beats.length; i++) {
-      if (beats[i].time >= currentTime - 0.001) return beats[i];
-    }
-    return beats[beats.length - 1] || { index: 0, time: 0 };
+    if (!beats.length) return { index: 0, time: 0 };
+    const index = lowerBoundByTime(beats, currentTime - 0.001);
+    return beats[Math.min(index, beats.length - 1)];
   }
 
+  /** Beat mais próximo para o anel visual e o julgamento, em O(log n). */
   nearestBeat(currentTime) {
     const { beats } = this.level;
-    let nearest = beats[0];
-    let best = Infinity;
-    for (const b of beats) {
-      const d = Math.abs(b.time - currentTime);
-      if (d < best) { best = d; nearest = b; }
-      if (b.time - currentTime > 1) break; // beats ordenados; corta cedo
-    }
-    return nearest;
+    if (!beats.length) return { index: 0, time: 0 };
+    const index = lowerBoundByTime(beats, currentTime);
+    const before = beats[Math.max(0, index - 1)];
+    const after = beats[Math.min(index, beats.length - 1)];
+    return Math.abs(currentTime - before.time) <= Math.abs(after.time - currentTime) ? before : after;
   }
 
   /** Chamado quando o jogador toca a tela. */
   tap(currentTime) {
-    if (this.player.dead || this.finished) return;
+    if (this.player.dead || this.finished) return false;
 
     if (this.mode === MODE.FREE) {
       if (!this.player.jumping) {
@@ -186,13 +197,14 @@ export class GameEngine {
         this.player.jumpOffset = 0;
         this.player.vy = this.freeGravity.v;
         this.callbacks.onTapVisual?.();
+        return true;
       }
-      return;
+      return false;
     }
 
-    // Modo Batida: só aceita toque se não estiver no ar.
-    if (this.player.jumping) return;
-
+    // Modo Batida: avalia primeiro a batida para permitir buffer dentro da janela.
+    // Assim um toque ligeiramente antecipado no beat seguinte não se perde só porque
+    // o último frame de animação ainda não atualizou a aterrissagem do salto anterior.
     const beat = this.nearestBeat(currentTime);
     const deltaMs = (currentTime - beat.time) * 1000;
     const absMs = Math.abs(deltaMs);
@@ -200,8 +212,25 @@ export class GameEngine {
     const windows = judgeWindowsForBeat(beatDurationMs); // tolerância musical
 
     if (absMs > windows.missMs) {
-      // Toque fora de janela: não pula (evita "spam"), mas não pune combo diretamente.
-      return;
+      // Toque fora de janela: não pula nem pune combo, mas dá feedback claro ao jogador.
+      this.callbacks.onTapMiss?.(deltaMs, beat);
+      return false;
+    }
+
+    // Recalcula a física no instante do toque: o loop visual pode estar um frame atrás.
+    if (this.player.jumping) {
+      this.updatePlayer(currentTime, 0);
+      if (this.player.jumping) {
+        const g = this.physics.g;
+        const landingDuration = (
+          this.player.vy
+          + Math.sqrt(this.player.vy ** 2 + 2 * g * this.player.jumpOffset)
+        ) / g;
+        const landingTime = this.player.jumpStart + landingDuration;
+        if (landingTime > beat.time + 0.001) return false;
+        this.updatePlayer(beat.time, 0);
+      }
+      if (this.player.jumping) return false;
     }
 
     let judge = 'GOOD';
@@ -216,6 +245,7 @@ export class GameEngine {
     // Combo + pontuação (com multiplicador) passam pelo registro central de hits.
     this.registerHit(judge === 'PERFECT' ? SCORE.PERFECT : SCORE.GOOD, judge);
     this.callbacks.onJudge?.(judge, this.combo);
+    return true;
   }
 
   /** Atualiza física do jogador (altura do pulo) para o tempo atual. */
@@ -236,10 +266,10 @@ export class GameEngine {
         p.squash = 1.3; // squash na aterrissagem
       } else {
         p.y = Math.max(0, y);
-        // Rotação: 90° por arco no modo batida (o arco dura 2·vy/g — 1 batida no
-        // pulo normal, 1,15 no pad, mais curto no air-jump); contínua no modo livre.
-        const total = this.mode === MODE.FREE ? Math.max(0.3, t * 2) : (2 * p.vy) / g;
-        const progress = Math.min(1, t / total);
+        // Um arco de pulo ocupa 90° de rotação, tanto no modo livre quanto no
+        // modo batida. A duração real vem da velocidade vertical e da gravidade.
+        const total = (2 * p.vy) / g;
+        const progress = Math.max(0, Math.min(1, t / total));
         p.rotation = progress * 90;
         p.squash = 1 - Math.min(0.25, y * 0.05); // estica levemente no ar
       }
@@ -321,7 +351,7 @@ export class GameEngine {
             p.jumpOffset = 0;
             p.jumpStart = currentTime;
             p.vy = this.physics.v * BOOST.PAD_ARC_BEATS;
-            this.callbacks.onOrb?.(ob);
+            this.callbacks.onPad?.(ob);
           }
         }
         continue;

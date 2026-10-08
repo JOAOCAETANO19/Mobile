@@ -10,6 +10,25 @@ export class Screens {
       game: root.querySelector('#screen-game'),
       overlay: root.querySelector('#overlay'),
     };
+    this.els.overlay?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Tab') return;
+      const focusable = [...this.els.overlay.querySelectorAll(
+        'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+      )];
+      if (!focusable.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
   }
 
   show(name) {
@@ -30,20 +49,35 @@ export class Screens {
   }
 
   showOverlay(html) {
-    this.els.overlay.innerHTML = html;
-    this.els.overlay.classList.remove('hidden');
+    const overlay = this.els.overlay;
+    overlay.innerHTML = html;
+    overlay.classList.remove('hidden', 'overlay-countdown');
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    const heading = overlay.querySelector('.overlay-card h2');
+    if (heading) overlay.setAttribute('aria-label', heading.textContent.trim());
+    overlay.querySelector('.overlay-actions button')?.focus({ preventScroll: true });
   }
 
   /** Overlay mais leve (a cena congelada aparece por trás) para a contagem 3-2-1. */
   showCountdown(html) {
-    this.els.overlay.innerHTML = html;
-    this.els.overlay.classList.remove('hidden');
-    this.els.overlay.classList.add('overlay-countdown');
+    const overlay = this.els.overlay;
+    overlay.innerHTML = html;
+    overlay.classList.remove('hidden');
+    overlay.classList.add('overlay-countdown');
+    overlay.setAttribute('aria-live', 'assertive');
+    overlay.setAttribute('aria-atomic', 'true');
   }
 
   hideOverlay() {
-    this.els.overlay.classList.add('hidden');
-    this.els.overlay.classList.remove('overlay-countdown');
+    const overlay = this.els.overlay;
+    overlay.classList.add('hidden');
+    overlay.classList.remove('overlay-countdown');
+    overlay.removeAttribute('role');
+    overlay.removeAttribute('aria-modal');
+    overlay.removeAttribute('aria-label');
+    overlay.removeAttribute('aria-live');
+    overlay.removeAttribute('aria-atomic');
   }
 
   countdownHtml(number, label) {
@@ -111,11 +145,13 @@ export class Screens {
   pauseOverlayHtml() {
     return `
       <div class="overlay-card">
-        <h2>⏸️ Pausado</h2>
+        <span class="overlay-eyebrow">RHYTHM DASH</span>
+        <h2>⏸️ Jogo pausado</h2>
+        <p>A música está em pausa. Quando voltar, toque na tela no ritmo para pular.</p>
         <div class="overlay-actions">
-          <button id="btn-continue">Continuar</button>
-          <button id="btn-mode-toggle" class="secondary">Trocar modo</button>
-          <button id="btn-quit" class="secondary">Sair para o menu</button>
+          <button id="btn-continue">Continuar jogando</button>
+          <button id="btn-restart" class="secondary">Recomeçar faixa</button>
+          <button id="btn-quit" class="secondary">Voltar ao menu</button>
         </div>
       </div>
     `;

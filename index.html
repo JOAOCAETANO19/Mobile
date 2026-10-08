@@ -2,9 +2,9 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <meta name="theme-color" content="#07030f" />
-  <meta name="description" content="Rhythm Dash — jogo estilo Geometry Dash onde a música gera o mapa." />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#11111d" />
+  <meta name="description" content="Rhythm Dash — transforme sua música em um desafio no ritmo." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -18,60 +18,201 @@
 </head>
 <body>
   <div id="app">
-    <section id="screen-home" class="screen">
-      <header class="hero">
-        <div class="hero-stage" aria-hidden="true">
-          <div class="hero-glow"></div>
-          <div class="hero-float">
-            <div class="hero-cube">
-              <i class="face f1"></i><i class="face f2"></i><i class="face f3"></i>
-              <i class="face f4"></i><i class="face f5"></i><i class="face f6"></i>
-            </div>
+    <section id="screen-home" class="screen home-screen">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="Rhythm Dash, início">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="brand-name">rhythm<span>dash</span></span>
+        </a>
+
+        <section class="account-area" aria-label="Conta e recordes">
+          <div class="account-bar">
+            <p id="account-summary" class="sr-only" role="status" aria-live="polite">Entre para salvar seus recordes na nuvem.</p>
+            <button id="account-toggle" class="account-toggle" type="button" aria-expanded="false" aria-controls="account-panel">
+              👤 Entrar
+            </button>
           </div>
-          <div class="hero-shadow"></div>
-        </div>
-        <h1>Rhythm Dash</h1>
-        <p>Escolha uma música — o jogo gera o mapa a partir do áudio, no seu aparelho.</p>
+          <div id="account-panel" class="auth-panel hidden">
+            <div id="auth-signed-out">
+              <div class="auth-heading">
+                <span class="auth-heading-mark" aria-hidden="true">♪</span>
+                <div>
+                  <p class="auth-eyebrow">RHYTHM DASH ID</p>
+                  <h2 id="auth-title">Entre na sua conta</h2>
+                </div>
+              </div>
+              <p id="auth-description" class="hint auth-description">Salve seus recordes e continue jogando em outro aparelho.</p>
+              <form id="auth-form" novalidate>
+                <div class="auth-field">
+                  <label for="auth-email">E-mail</label>
+                  <input id="auth-email" name="email" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" required placeholder="voce@exemplo.com" />
+                </div>
+                <div class="auth-field">
+                  <div class="auth-field-heading">
+                    <label for="auth-password">Senha</label>
+                    <button class="auth-password-toggle" type="button" data-password-target="auth-password" aria-label="Mostrar senha" aria-pressed="false">Mostrar</button>
+                  </div>
+                  <div class="auth-input-wrap">
+                    <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="8" required placeholder="Sua senha" />
+                  </div>
+                </div>
+                <div id="auth-confirm-wrap" class="auth-field hidden">
+                  <div class="auth-field-heading">
+                    <label for="auth-confirm-password">Confirme a senha</label>
+                    <button class="auth-password-toggle" type="button" data-password-target="auth-confirm-password" aria-label="Mostrar confirmação da senha" aria-pressed="false">Mostrar</button>
+                  </div>
+                  <div class="auth-input-wrap">
+                    <input id="auth-confirm-password" name="confirm-password" type="password" autocomplete="new-password" minlength="8" />
+                  </div>
+                </div>
+                <p id="auth-password-help" class="auth-password-help hidden">Use pelo menos 8 caracteres. Uma senha única ajuda a proteger seus recordes.</p>
+                <div class="auth-actions">
+                  <button id="auth-submit" type="submit">Entrar</button>
+                  <button id="auth-mode-toggle" class="secondary" type="button">Criar conta</button>
+                </div>
+              </form>
+              <p id="auth-note" class="hint auth-note">Ainda não tem conta? Crie uma para manter seus recordes sincronizados.</p>
+
+              <section id="auth-confirmation" class="auth-confirmation hidden" aria-labelledby="auth-confirmation-heading">
+                <div class="auth-confirm-icon" aria-hidden="true">✉</div>
+                <h3 id="auth-confirmation-heading">Confirme seu e-mail</h3>
+                <p>Enviamos um link de confirmação para <strong id="auth-confirmation-email"></strong>.</p>
+                <p class="auth-confirm-hint">Abra o link para ativar a conta. Se não encontrar a mensagem, confira o spam.</p>
+                <div class="auth-actions auth-confirm-actions">
+                  <button id="auth-resend" type="button">Reenviar link</button>
+                </div>
+                <div class="auth-confirm-links">
+                  <button id="auth-change-email" type="button">Trocar e-mail</button>
+                  <button id="auth-confirm-login" type="button">Voltar para entrar</button>
+                </div>
+              </section>
+            </div>
+            <div id="auth-signed-in" class="hidden">
+              <p>Conectado como <strong id="account-email"></strong></p>
+              <div class="auth-actions">
+                <button id="sync-records-btn" type="button">Sincronizar recordes</button>
+                <button id="import-local-records-btn" class="secondary hidden" type="button">Importar recordes locais</button>
+                <button id="auth-signout-btn" class="secondary" type="button">Sair</button>
+              </div>
+              <p id="local-import-hint" class="hint hidden">Importe apenas se esses recordes locais forem seus; depois do envio, eles ficam vinculados a esta conta.</p>
+              <h3>Seus melhores recordes</h3>
+              <div id="records-list" class="records-list"></div>
+            </div>
+            <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
+          </div>
+        </section>
       </header>
 
-      <div class="search-box">
-        <input id="search-input" type="text" placeholder="Buscar música, colar link (Spotify/YouTube/MP3)…" />
-        <button id="search-btn">Buscar</button>
-      </div>
+      <main class="home-content">
+        <section class="hero" aria-labelledby="home-heading">
+          <div class="hero-copy">
+            <p class="hero-kicker"><span></span> SINTA O RITMO</p>
+            <h1 id="home-heading">A música<br /><em>vira jogo.</em></h1>
+            <p class="hero-description">Escolha uma faixa. Pule no tempo. O som cria o desafio.</p>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="art-glow"></div>
+            <div class="vinyl-record">
+              <div class="vinyl-label">♪</div>
+            </div>
+            <div class="sound-bars">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+            <span class="bpm-tag">128 <small>BPM</small></span>
+            <span class="art-spark">✦</span>
+          </div>
+        </section>
 
-      <div class="quick-actions">
-        <label class="file-btn">
-          📂 Arquivo do aparelho
-          <input id="file-input" type="file" accept="audio/*" hidden />
-        </label>
-        <button id="demo-btn" class="secondary">🎮 Música do jogo (demo 128 BPM)</button>
-      </div>
+        <button id="demo-btn" class="demo-button" type="button">
+          <span class="demo-play-icon" aria-hidden="true">▶</span>
+          <span class="demo-button-copy">
+            <strong>Jogar faixa demo</strong>
+            <small>32 s · 128 BPM · sem precisar buscar</small>
+          </span>
+          <span class="demo-button-arrow" aria-hidden="true">↗</span>
+        </button>
 
-      <div id="search-results" class="results"></div>
+        <section class="music-section" aria-labelledby="music-heading">
+          <div class="section-heading">
+            <p class="section-kicker">ESCOLHA SEU SOM</p>
+            <h2 id="music-heading">Escolha sua música</h2>
+            <p class="section-description">Busque pelo nome, artista ou cole um link.</p>
+          </div>
+          <div class="search-box">
+            <label class="sr-only" for="search-input">Buscar música ou colar um link</label>
+            <svg class="search-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
+              <circle cx="10.8" cy="10.8" r="6.8"></circle>
+              <path d="m16 16 4.2 4.2"></path>
+            </svg>
+            <input id="search-input" type="text" placeholder="Artista, música ou link…" />
+            <button id="search-btn" type="button">Buscar</button>
+          </div>
 
-      <details class="settings">
-        <summary>⚙️ Modo de jogo &amp; 🖥️ Backend próprio</summary>
-        <div class="settings-body">
-          <label>
-            Modo de jogo:
+          <div class="source-divider" aria-hidden="true"><span>OU</span></div>
+          <div class="quick-actions">
+            <label class="file-btn">
+              <span class="file-icon" aria-hidden="true">♫</span>
+              <span class="file-copy">
+                <strong>Usar música do celular</strong>
+                <small>Escolha um arquivo de áudio</small>
+              </span>
+              <span class="file-arrow" aria-hidden="true">↗</span>
+              <input id="file-input" type="file" accept="audio/*" hidden />
+            </label>
+          </div>
+        </section>
+
+        <div id="search-results" class="results"></div>
+
+        <details class="settings">
+          <summary><span aria-hidden="true">⚙</span> Configurações</summary>
+          <div class="settings-body">
+            <label for="mode-select">Modo de jogo</label>
             <select id="mode-select">
               <option value="beat">🎯 Modo Batida (recomendado)</option>
               <option value="free">🕹️ Modo Livre</option>
             </select>
-          </label>
+            <p class="hint">Cada faixa vira seu próprio mapa. No Modo Batida, há um obstáculo saltável em cada batida; no Modo Livre, o mapa cria pausas e desafios variados.</p>
 
-          <p class="hint">
-            Backend próprio (yt-dlp) — músicas completas de qualquer fonte. Requer HTTPS se o
-            app estiver rodando em https (veja o README para túnel/deploy).
-          </p>
-          <div class="backend-row">
-            <input id="backend-url" type="text" placeholder="https://seu-servidor.exemplo.com" />
-            <input id="backend-key" type="text" placeholder="chave (opcional)" />
-            <button id="backend-test-btn">Testar</button>
+            <div class="setting-control">
+              <div class="setting-label-row">
+                <label for="timing-offset">Sincronização do toque</label>
+                <output id="timing-offset-value" for="timing-offset">0 ms</output>
+              </div>
+              <input id="timing-offset" type="range" min="-120" max="120" step="10" value="0" />
+              <p class="hint">Ajuste em passos de 10 ms se o áudio e o toque parecerem fora de sincronia. Valores negativos compensam áudio atrasado.</p>
+            </div>
+
+            <div class="setting-control">
+              <div class="setting-label-row">
+                <label for="music-volume">Volume da música</label>
+                <output id="music-volume-value" for="music-volume">85%</output>
+              </div>
+              <input id="music-volume" type="range" min="0" max="100" step="1" value="85" />
+            </div>
+
+            <label class="setting-toggle" for="sound-enabled">
+              <input id="sound-enabled" type="checkbox" checked />
+              <span><strong>Efeitos sonoros</strong><small>Feedback de batida, combo e interface</small></span>
+            </label>
+            <label class="setting-toggle" for="haptics-enabled">
+              <input id="haptics-enabled" type="checkbox" checked />
+              <span><strong>Vibração tátil</strong><small>Desative para economizar bateria ou jogar em silêncio</small></span>
+            </label>
+
+            <p class="hint">
+              Backend próprio (yt-dlp) — para músicas completas. Requer HTTPS quando o app estiver em HTTPS.
+            </p>
+            <div class="backend-row">
+              <input id="backend-url" type="url" placeholder="https://seu-servidor.exemplo.com" aria-label="Endereço do backend" />
+              <input id="backend-key" type="password" placeholder="Chave (opcional)" aria-label="Chave do backend" />
+              <button id="backend-test-btn" type="button">Testar</button>
+            </div>
+            <p id="backend-status" class="hint" role="status"></p>
           </div>
-          <p id="backend-status" class="hint"></p>
-        </div>
-      </details>
+        </details>
+        <p class="home-footer">Feito para jogar no celular <span aria-hidden="true">·</span> no seu ritmo</p>
+      </main>
     </section>
 
     <section id="screen-loading" class="screen hidden">
@@ -83,11 +224,12 @@
     </section>
 
     <section id="screen-game" class="screen hidden">
-      <canvas id="game-canvas"></canvas>
-      <button id="pause-btn" class="pause-btn" aria-label="Pausar">⏸</button>
+      <canvas id="game-canvas" role="img" aria-label="Jogo Rhythm Dash. Toque em qualquer lugar da tela no ritmo da música para pular obstáculos."></canvas>
+      <button id="pause-btn" class="pause-btn" type="button" aria-label="Pausar jogo" title="Pausar">⏸</button>
     </section>
 
     <div id="overlay" class="overlay hidden"></div>
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   </div>
 
   <script type="module" src="/src/main.js"></script>

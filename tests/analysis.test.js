@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeFrames, detectOnsets, estimateBpm, detectSections, deriveTheme, analyzeAudioBuffer, toMono } from '../src/core/analysis.js';
+import { computeFrames, detectOnsets, estimateBpm, refineBpmFromOnsets, detectSections, deriveTheme, analyzeAudioBuffer, toMono } from '../src/core/analysis.js';
 
 const SAMPLE_RATE = 22050;
 
@@ -42,9 +42,11 @@ test('toMono faz a média dos canais', () => {
 test('computeFrames produz flux/centroid/rms do mesmo tamanho', () => {
   const mono = synthKicks(120, 2);
   const frames = computeFrames(mono, SAMPLE_RATE);
+  assert.equal(frames.flux.length, frames.bassFlux.length);
   assert.equal(frames.flux.length, frames.centroid.length);
   assert.equal(frames.flux.length, frames.rms.length);
   assert.ok(frames.flux.length > 0);
+  assert.ok(Math.max(...frames.bassFlux) > 0);
 });
 
 test('detectOnsets encontra picos correspondentes aos kicks sintéticos', () => {
@@ -56,6 +58,19 @@ test('detectOnsets encontra picos correspondentes aos kicks sintéticos', () => 
   assert.ok(onsets.length >= 5 && onsets.length <= 10, `esperado ~8 onsets, veio ${onsets.length}`);
 });
 
+test('bassOnsets detecta kicks graves com fase próxima da batida', () => {
+  const bpm = 120;
+  const mono = synthKicks(bpm, 4);
+  const frames = computeFrames(mono, SAMPLE_RATE);
+  const bassOnsets = detectOnsets(frames.bassFlux, frames.times);
+  const beatDuration = 60 / bpm;
+  assert.ok(bassOnsets.length >= 5, `esperados kicks graves, veio ${bassOnsets.length}`);
+  for (const onset of bassOnsets) {
+    const phase = ((onset.time % beatDuration) + beatDuration) % beatDuration;
+    assert.ok(Math.min(phase, beatDuration - phase) < 0.07, `kick fora da batida: ${onset.time}s`);
+  }
+});
+
 test('estimateBpm recupera o BPM aproximado de um sinal sintético a 128 BPM', () => {
   const bpm = 128;
   const mono = synthKicks(bpm, 8);
@@ -63,6 +78,20 @@ test('estimateBpm recupera o BPM aproximado de um sinal sintético a 128 BPM', (
   const onsets = detectOnsets(frames.flux, frames.times);
   const { bpm: estimated } = estimateBpm(onsets);
   assert.ok(Math.abs(estimated - bpm) <= 3, `esperado ~${bpm} BPM, veio ${estimated}`);
+});
+
+test('refineBpmFromOnsets recupera o tempo do kick dentro da estimativa global', () => {
+  const expectedBpm = 128;
+  const beatDuration = 60 / expectedBpm;
+  const bassOnsets = Array.from({ length: 32 }, (_, i) => ({
+    time: 0.123 + i * beatDuration + (i % 5 === 0 ? 0.004 : 0),
+    strength: i % 3 === 0 ? 0.9 : 0.7,
+  }));
+  for (let i = 0; i < 8; i++) bassOnsets.push({ time: 0.15 + i * 1.7, strength: 0.12 });
+
+  const refined = refineBpmFromOnsets(130.4, bassOnsets);
+  assert.equal(refined.refined, true);
+  assert.ok(Math.abs(refined.bpm - expectedBpm) <= 0.2, `BPM refinado ${refined.bpm}`);
 });
 
 test('estimateBpm com poucos onsets retorna fallback com confiança 0', () => {
@@ -81,6 +110,11 @@ test('detectSections cobre toda a duração sem buracos', () => {
   assert.ok(Math.abs(sections[sections.length - 1].end - 6) < 1e-6);
   for (let i = 1; i < sections.length; i++) {
     assert.equal(sections[i].start, sections[i - 1].end);
+  }
+  for (const section of sections) {
+    assert.ok(section.energy >= 0 && section.energy <= 1);
+    assert.ok(section.onsetDensity >= 0 && section.onsetDensity <= 1);
+    assert.ok(section.intensity >= 0 && section.intensity <= 1);
   }
 });
 
@@ -101,7 +135,11 @@ test('analyzeAudioBuffer pipeline completo retorna estrutura esperada', () => {
   const buffer = fakeAudioBuffer(mono);
   const analysis = analyzeAudioBuffer(buffer);
   assert.ok(analysis.bpm > 0);
+  assert.ok(Math.abs(analysis.bpm - 128) <= 1, `BPM ajustado aos kicks: ${analysis.bpm}`);
+  assert.equal(analysis.bpmSource, 'bass');
   assert.ok(analysis.sections.length >= 1);
   assert.ok(Array.isArray(analysis.onsets));
+  assert.ok(Array.isArray(analysis.bassOnsets));
+  assert.ok(analysis.bassOnsets.length > 0);
   assert.ok(analysis.durationSec > 0);
 });
